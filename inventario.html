@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Inventario & Insumos - SDC</title>
+    <!-- SUPABASE CLIENT SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- FAVICON -->
+    <link rel="icon" type="image/png" href="logo.png">
+    <style>
+        :root {
+            --primary: #ff4757;
+            --primary-dark: #e84118;
+            --dark: #2f3542;
+            --light: #f1f2f6;
+            --white: #ffffff;
+            --border: #dfe4ea;
+            --success: #2ed573;
+            --warning: #ffa502;
+            --danger: #ff6b81;
+            --blue: #1e90ff;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--light); min-height: 100vh; display: flex; flex-direction: column; color: var(--dark); padding-bottom: 30px; }
+
+        /* NAVBAR Y MENÚ HAMBURGUESA EN MÓVIL */
+        nav { background-color: var(--dark); padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 100; }
+        .nav-brand { color: var(--white); font-weight: bold; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+        .menu-toggle { display: none; background: none; border: none; color: var(--white); font-size: 24px; cursor: pointer; outline: none; }
+        
+        .nav-links { display: flex; gap: 8px; }
+        .nav-links a { text-decoration: none; border: 1px solid var(--border); color: var(--white); padding: 8px 12px; border-radius: 6px; font-weight: bold; font-size: 13px; transition: 0.2s; white-space: nowrap; }
+        .nav-links a:hover, .nav-links a.activo { background-color: var(--primary); border-color: var(--primary); }
+
+        @media (max-width: 768px) {
+            .menu-toggle { display: block; }
+            .nav-links { display: none; width: 100%; position: absolute; top: 100%; left: 0; background-color: var(--dark); flex-direction: column; padding: 10px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+            .nav-links.activo { display: flex; }
+            .nav-links a { width: 100%; text-align: center; padding: 10px; }
+        }
+
+        /* CONTENEDOR PRINCIPAL */
+        .main-container { max-width: 1200px; margin: 0 auto; width: 100%; padding: 15px; display: flex; flex-direction: column; gap: 15px; }
+        @media (max-width: 768px) { .main-container { padding: 8px; gap: 10px; } }
+
+        /* HEADER Y PESTAÑAS */
+        .header-panel { background: var(--white); padding: 12px 15px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .header-panel h1 { font-size: 18px; color: var(--dark); display: flex; align-items: center; gap: 8px; }
+        .tasa-badge { background: var(--dark); color: white; padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 12px; }
+        .tasa-badge span { color: var(--success); }
+
+        .tabs-bar { display: flex; gap: 8px; border-bottom: 2px solid var(--border); padding-bottom: 2px; }
+        .tab-btn { background: none; border: none; padding: 8px 16px; font-size: 14px; font-weight: bold; color: #747d8c; cursor: pointer; border-radius: 6px 6px 0 0; transition: 0.2s; }
+        .tab-btn.activo { background: var(--white); color: var(--primary); border-bottom: 3px solid var(--primary); }
+
+        /* BARRA DE BÚSQUEDA Y BOTÓN NUEVO */
+        .action-bar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .buscador { flex: 1; min-width: 200px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; outline: none; background: white; }
+        .buscador:focus { border-color: var(--primary); }
+        
+        .btn-crear { background: var(--success); color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: bold; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: 0.2s; white-space: nowrap; }
+        .btn-crear:hover { background: #26af5f; }
+
+        /* TARJETAS RESPONSIVAS EN LUGAR DE TABLAS PESADAS */
+        .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+        @media (max-width: 768px) {
+            .grid-cards { grid-template-columns: 1fr; gap: 8px; } /* 1 sola columna fácil de leer en teléfono */
+        }
+
+        .card-item { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
+        .card-item-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+        .card-item-title { font-size: 15px; font-weight: bold; color: var(--dark); line-height: 1.2; }
+        
+        .card-item-prices { display: flex; gap: 12px; align-items: baseline; }
+        .price-usd { font-size: 16px; font-weight: bold; color: var(--success); }
+        .price-bs { font-size: 12px; font-weight: bold; color: var(--blue); }
+
+        .card-badge-insumo { font-size: 11px; background: #f8f9fa; color: #2f3542; padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
+        .stock-val { font-weight: bold; }
+        .stock-val.ok { color: var(--success); }
+        .stock-val.bajo { color: var(--danger); }
+
+        .card-actions { display: flex; justify-content: flex-end; gap: 6px; border-top: 1px solid #f1f2f6; padding-top: 8px; margin-top: 4px; }
+        .btn-action { border: none; padding: 6px 12px; border-radius: 5px; font-size: 11px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+        .btn-edit { background: #e1f5fe; color: #0288d1; }
+        .btn-edit:hover { background: #b3e5fc; }
+        .btn-delete { background: #ffebee; color: #c62828; }
+        .btn-delete:hover { background: #ffcdd2; }
+        .btn-stock { background: #e8f5e9; color: #2e7d32; }
+        .btn-stock:hover { background: #c8e6c9; }
+
+        .vacio { text-align: center; color: #747d8c; padding: 30px; font-size: 13px; background: white; border-radius: 8px; border: 1px solid var(--border); }
+
+        /* MODALES */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 15px; }
+        .modal-content { background: white; border-radius: 8px; width: 100%; max-width: 420px; padding: 18px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: flex; flex-direction: column; gap: 12px; max-height: 90vh; overflow-y: auto; }
+        .modal-content h3 { font-size: 16px; color: var(--dark); border-bottom: 2px solid var(--light); padding-bottom: 6px; }
+        
+        .modal-field { display: flex; flex-direction: column; gap: 4px; }
+        .modal-field label { font-size: 11px; font-weight: bold; color: var(--dark); }
+        .modal-field input, .modal-field select { padding: 9px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; outline: none; background: white; }
+        .modal-field input:focus, .modal-field select:focus { border-color: var(--primary); }
+
+        .modal-acciones { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+        .btn-modal-cancel { background: #a4b0be; color: white; border: none; padding: 9px 14px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }
+        .btn-modal-save { background: var(--success); color: white; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR RESPONSIVO -->
+    <nav>
+        <div class="nav-brand">
+             Sala De Control
+        </div>
+        <button class="menu-toggle" onclick="toggleNavMenu()">☰</button>
+        <div class="nav-links" id="navLinks">
+            <a href="index.html">Nueva Venta</a>
+            <a href="inventario.html" class="activo">Inventario</a>
+            <a href="tasa.html">Tasa del Día</a>
+            <a href="ventas.html">Ventas</a>
+            <a href="cierre.html">Cierre de Caja</a>
+        </div>
+    </nav>
+
+    <!-- CONTENEDOR PRINCIPAL -->
+    <div class="main-container">
+
+        <!-- HEADER PANEL -->
+        <div class="header-panel">
+            <h1>📦 Control de Inventario</h1>
+            <div class="tasa-badge">Tasa: $<span id="tasa-valor">0.00</span> Bs</div>
+        </div>
+
+        <!-- PESTAÑAS PARA PRODUCTOS vs INSUMOS -->
+        <div class="tabs-bar">
+            <button class="tab-btn activo" id="tab-productos" onclick="cambiarTab('productos')">🍔 Productos de Venta</button>
+            <button class="tab-btn" id="tab-insumos" onclick="cambiarTab('insumos')">🥖 Materia Prima / Insumos</button>
+        </div>
+
+        <!-- BARRA DE ACCIÓN Y BUSCADOR -->
+        <div class="action-bar">
+            <input type="text" id="input-buscar" class="buscador" placeholder="🔍 Buscar..." oninput="filtrarContenido()">
+            <button class="btn-crear" id="btn-crear-nuevo" onclick="abrirModalNuevo()">
+                ➕ Nuevo Producto
+            </button>
+        </div>
+
+        <!-- VISTA DE CONTENIDOS -->
+        <div id="grid-productos" class="grid-cards">
+            <div class="vacio">Cargando datos...</div>
+        </div>
+
+    </div>
+
+    <!-- MODAL PRODUCTO (CREAR / EDITAR) -->
+    <div id="modal-producto" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <h3 id="modal-prod-titulo">🍔 Nuevo Producto de Venta</h3>
+            <input type="hidden" id="prod-id">
+            
+            <div class="modal-field">
+                <label>Nombre del Producto *</label>
+                <input type="text" id="prod-nombre" placeholder="Ej: Hamburguesa Especial">
+            </div>
+
+            <div class="modal-field">
+                <label>Precio en USD ($) *</label>
+                <input type="number" step="0.01" id="prod-precio" placeholder="Ej: 3.50">
+            </div>
+
+            <div class="modal-field">
+                <label>Insumo Asociado (Para descontar stock en venta)</label>
+                <select id="prod-insumo-id">
+                    <option value="">-- Ninguno (Sin descuento automático) --</option>
+                </select>
+            </div>
+
+            <div class="modal-field">
+                <label>Cantidad de Insumo por Venta</label>
+                <input type="number" step="1" id="prod-cant-insumo" value="1" placeholder="Ej: 1 pan por hamburguesa">
+            </div>
+
+            <div class="modal-acciones">
+                <button type="button" class="btn-modal-cancel" onclick="cerrarModal('modal-producto')">Cancelar</button>
+                <button type="button" class="btn-modal-save" onclick="guardarProducto()">Guardar Producto</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL INSUMO (CREAR / EDITAR) -->
+    <div id="modal-insumo" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <h3 id="modal-ins-titulo">🥖 Nuevo Insumo / Materia Prima</h3>
+            <input type="hidden" id="ins-id">
+            
+            <div class="modal-field">
+                <label>Nombre del Insumo *</label>
+                <input type="text" id="ins-nombre" placeholder="Ej: Pan de Hamburguesa">
+            </div>
+
+            <div class="modal-field">
+                <label>Cantidad Inicial en Stock *</label>
+                <input type="number" step="1" id="ins-stock" placeholder="Ej: 50">
+            </div>
+
+            <div class="modal-acciones">
+                <button type="button" class="btn-modal-cancel" onclick="cerrarModal('modal-insumo')">Cancelar</button>
+                <button type="button" class="btn-modal-save" onclick="guardarInsumo()">Guardar Insumo</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL AJUSTE RÁPIDO DE STOCK INSUMO -->
+    <div id="modal-ajuste-stock" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <h3>📦 Cargar / Ajustar Stock</h3>
+            <input type="hidden" id="ajuste-ins-id">
+            
+            <p id="ajuste-ins-nombre" style="font-weight:bold; font-size:13px; color:var(--dark);"></p>
+            <p id="ajuste-ins-actual" style="font-size:12px; color:#57606f;"></p>
+
+            <div class="modal-field">
+                <label>Cantidad a Agregar (Suma al stock actual)</label>
+                <input type="number" step="1" id="ajuste-cantidad" placeholder="Ej: 20 para agregar 20 unidades" autofocus>
+            </div>
+
+            <div class="modal-acciones">
+                <button type="button" class="btn-modal-cancel" onclick="cerrarModal('modal-ajuste-stock')">Cancelar</button>
+                <button type="button" class="btn-modal-save" onclick="guardarAjusteStock()">Añadir al Stock</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT Y CONEXIÓN A SUPABASE -->
+    <script>
+        const SUPABASE_URL = 'https://zoamybqkzcguvynxrzbx.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvYW15YnFremNndXZ5bnhyemJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4OTEyMzYsImV4cCI6MjEwNDQ2NzIzNn0.nuPzT3cLUnt0VIlOa4TbZthdkOYQCK6S5vpGW8A2U5E';
+        
+        let db = null;
+        let tasaCambio = 1;
+        let tabActual = 'productos'; // 'productos' o 'insumos'
+        
+        let listaProductos = [];
+        let listaInsumos = [];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.supabase) {
+                db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                inicializarInventario();
+            } else {
+                alert("Error: No se pudo cargar el SDK de Supabase.");
+            }
+        });
+
+        function toggleNavMenu() {
+            document.getElementById('navLinks').classList.toggle('activo');
+        }
+
+        async function inicializarInventario() {
+            await cargarTasa();
+            await cargarInsumos();
+            await cargarProductos();
+            renderizarActual();
+        }
+
+        async function cargarTasa() {
+            try {
+                const { data } = await db.from('tasa_dia').select('tasa').order('id', { ascending: false }).limit(1);
+                if (data && data.length > 0) {
+                    tasaCambio = parseFloat(data[0].tasa) || 1;
+                }
+                document.getElementById('tasa-valor').innerText = tasaCambio.toFixed(2);
+            } catch (e) {
+                console.error("Error al obtener la tasa:", e);
+            }
+        }
+
+        async function cargarInsumos() {
+            try {
+                const { data, error } = await db.from('insumos').select('*').order('nombre', { ascending: true });
+                if (error) throw error;
+                listaInsumos = data || [];
+                poblarSelectInsumos();
+            } catch (err) {
+                console.error("Error cargando insumos:", err);
+            }
+        }
+
+        async function cargarProductos() {
+            try {
+                const { data, error } = await db.from('inventario')
+                    .select('*, insumos(nombre, stock)')
+                    .order('nombre', { ascending: true });
+                if (error) throw error;
+                listaProductos = data || [];
+            } catch (err) {
+                console.error("Error cargando productos:", err);
+            }
+        }
+
+        function cambiarTab(tab) {
+            tabActual = tab;
+            document.getElementById('tab-productos').classList.toggle('activo', tab === 'productos');
+            document.getElementById('tab-insumos').classList.toggle('activo', tab === 'insumos');
+            
+            const btnCrear = document.getElementById('btn-crear-nuevo');
+            btnCrear.innerText = tab === 'productos' ? '➕ Nuevo Producto' : '➕ Nuevo Insumo';
+            
+            document.getElementById('input-buscar').value = '';
+            renderizarActual();
+        }
+
+        function renderizarActual() {
+            if (tabActual === 'productos') {
+                renderizarProductos(listaProductos);
+            } else {
+                renderizarInsumos(listaInsumos);
+            }
+        }
+
+        function filtrarContenido() {
+            const texto = document.getElementById('input-buscar').value.toLowerCase().trim();
+            if (tabActual === 'productos') {
+                const filtrados = listaProductos.filter(p => p.nombre.toLowerCase().includes(texto));
+                renderizarProductos(filtrados);
+            } else {
+                const filtrados = listaInsumos.filter(i => i.nombre.toLowerCase().includes(texto));
+                renderizarInsumos(filtrados);
+            }
+        }
+
+        /* --- RENDER PRODUCTOS DE VENTA --- */
+
+        function renderizarProductos(productos) {
+            const grid = document.getElementById('grid-productos');
+            grid.innerHTML = '';
+
+            if (productos.length === 0) {
+                grid.innerHTML = `<div class="vacio">No hay productos registrados.</div>`;
+                return;
+            }
+
+            productos.forEach(prod => {
+                const precioUsd = parseFloat(prod.precio_usd) || 0;
+                const precioBs = (precioUsd * tasaCambio).toFixed(2);
+                
+                const insumoNombre = prod.insumos ? prod.insumos.nombre : null;
+                const insumoStock = prod.insumos ? prod.insumos.stock : null;
+
+                let insumoInfoHTML = `<div class="card-badge-insumo" style="color:#a4b0be;">Sin insumo asociado</div>`;
+                if (insumoNombre !== null) {
+                    const statusClass = insumoStock > 5 ? 'ok' : 'bajo';
+                    insumoInfoHTML = `
+                        <div class="card-badge-insumo">
+                            <span>🥖 Insumo: <strong>${insumoNombre}</strong></span>
+                            <span class="stock-val ${statusClass}">Stock: ${insumoStock}</span>
+                        </div>
+                    `;
+                }
+
+                const card = document.createElement('div');
+                card.className = 'card-item';
+                card.innerHTML = `
+                    <div class="card-item-header">
+                        <div class="card-item-title">${prod.nombre}</div>
+                        <div class="card-item-prices">
+                            <span class="price-usd">$${precioUsd.toFixed(2)}</span>
+                            <span class="price-bs">Bs ${precioBs}</span>
+                        </div>
+                    </div>
+                    ${insumoInfoHTML}
+                    <div class="card-actions">
+                        <button class="btn-action btn-edit" onclick="editarProducto(${prod.id})">✏️ Editar</button>
+                        <button class="btn-action btn-delete" onclick="eliminarProducto(${prod.id})">🗑️ Eliminar</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        /* --- RENDER INSUMOS / MATERIA PRIMA --- */
+
+        function renderizarInsumos(insumos) {
+            const grid = document.getElementById('grid-productos');
+            grid.innerHTML = '';
+
+            if (insumos.length === 0) {
+                grid.innerHTML = `<div class="vacio">No hay insumos registrados.</div>`;
+                return;
+            }
+
+            insumos.forEach(ins => {
+                const stock = parseFloat(ins.stock) || 0;
+                const statusClass = stock > 5 ? 'ok' : 'bajo';
+
+                const card = document.createElement('div');
+                card.className = 'card-item';
+                card.innerHTML = `
+                    <div class="card-item-header">
+                        <div class="card-item-title">🥖 ${ins.nombre}</div>
+                        <div class="stock-val ${statusClass}" style="font-size:16px;">
+                            ${stock} unidades
+                        </div>
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn-action btn-stock" onclick="abrirAjusteStock(${ins.id}, '${ins.nombre}', ${stock})">📦 Cargar Stock</button>
+                        <button class="btn-action btn-edit" onclick="editarInsumo(${ins.id})">✏️ Editar</button>
+                        <button class="btn-action btn-delete" onclick="eliminarInsumo(${ins.id})">🗑️ Eliminar</button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        /* --- MANEJO DE MODALES Y FORMULARIOS --- */
+
+        function poblarSelectInsumos() {
+            const select = document.getElementById('prod-insumo-id');
+            select.innerHTML = `<option value="">-- Ninguno (Sin descuento automático) --</option>`;
+            listaInsumos.forEach(ins => {
+                select.innerHTML += `<option value="${ins.id}">${ins.nombre} (Stock actual: ${ins.stock})</option>`;
+            });
+        }
+
+        function abrirModalNuevo() {
+            if (tabActual === 'productos') {
+                document.getElementById('modal-prod-titulo').innerText = '🍔 Nuevo Producto de Venta';
+                document.getElementById('prod-id').value = '';
+                document.getElementById('prod-nombre').value = '';
+                document.getElementById('prod-precio').value = '';
+                document.getElementById('prod-insumo-id').value = '';
+                document.getElementById('prod-cant-insumo').value = '1';
+                poblarSelectInsumos();
+                document.getElementById('modal-producto').style.display = 'flex';
+                document.getElementById('prod-nombre').focus();
+            } else {
+                document.getElementById('modal-ins-titulo').innerText = '🥖 Nuevo Insumo / Materia Prima';
+                document.getElementById('ins-id').value = '';
+                document.getElementById('ins-nombre').value = '';
+                document.getElementById('ins-stock').value = '';
+                document.getElementById('modal-insumo').style.display = 'flex';
+                document.getElementById('ins-nombre').focus();
+            }
+        }
+
+        function cerrarModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        /* --- CRUD PRODUCTOS --- */
+
+        function editarProducto(id) {
+            const prod = listaProductos.find(p => p.id === id);
+            if (!prod) return;
+
+            document.getElementById('modal-prod-titulo').innerText = '✏️ Editar Producto';
+            document.getElementById('prod-id').value = prod.id;
+            document.getElementById('prod-nombre').value = prod.nombre;
+            document.getElementById('prod-precio').value = prod.precio_usd;
+            poblarSelectInsumos();
+            document.getElementById('prod-insumo-id').value = prod.insumo_id || '';
+            document.getElementById('prod-cant-insumo').value = prod.cantidad_insumo || 1;
+
+            document.getElementById('modal-producto').style.display = 'flex';
+        }
+
+        async function guardarProducto() {
+            const id = document.getElementById('prod-id').value;
+            const nombre = document.getElementById('prod-nombre').value.trim();
+            const precio = parseFloat(document.getElementById('prod-precio').value);
+            const insumoId = document.getElementById('prod-insumo-id').value || null;
+            const cantInsumo = parseFloat(document.getElementById('prod-cant-insumo').value) || 1;
+
+            if (!nombre || isNaN(precio) || precio < 0) {
+                alert("⚠️ Por favor ingresa un nombre y precio válido.");
+                return;
+            }
+
+            try {
+                const payload = {
+                    nombre: nombre,
+                    precio_usd: precio,
+                    insumo_id: insumoId ? parseInt(insumoId) : null,
+                    cantidad_insumo: cantInsumo
+                };
+
+                if (id) {
+                    await db.from('inventario').update(payload).eq('id', id);
+                } else {
+                    await db.from('inventario').insert([payload]);
+                }
+
+                cerrarModal('modal-producto');
+                await cargarProductos();
+                renderizarActual();
+            } catch (err) {
+                alert("Error al guardar producto: " + err.message);
+            }
+        }
+
+        async function eliminarProducto(id) {
+            if (!confirm("¿Estás seguro de eliminar este producto?")) return;
+            try {
+                await db.from('inventario').delete().eq('id', id);
+                await cargarProductos();
+                renderizarActual();
+            } catch (err) {
+                alert("Error al eliminar producto: " + err.message);
+            }
+        }
+
+        /* --- CRUD INSUMOS --- */
+
+        function editarInsumo(id) {
+            const ins = listaInsumos.find(i => i.id === id);
+            if (!ins) return;
+
+            document.getElementById('modal-ins-titulo').innerText = '✏️ Editar Insumo';
+            document.getElementById('ins-id').value = ins.id;
+            document.getElementById('ins-nombre').value = ins.nombre;
+            document.getElementById('ins-stock').value = ins.stock;
+
+            document.getElementById('modal-insumo').style.display = 'flex';
+        }
+
+        async function guardarInsumo() {
+            const id = document.getElementById('ins-id').value;
+            const nombre = document.getElementById('ins-nombre').value.trim();
+            const stock = parseFloat(document.getElementById('ins-stock').value);
+
+            if (!nombre || isNaN(stock)) {
+                alert("⚠️ Por favor ingresa el nombre y stock válido.");
+                return;
+            }
+
+            try {
+                const payload = { nombre: nombre, stock: stock };
+
+                if (id) {
+                    await db.from('insumos').update(payload).eq('id', id);
+                } else {
+                    await db.from('insumos').insert([payload]);
+                }
+
+                cerrarModal('modal-insumo');
+                await cargarInsumos();
+                await cargarProductos();
+                renderizarActual();
+            } catch (err) {
+                alert("Error al guardar insumo: " + err.message);
+            }
+        }
+
+        async function eliminarInsumo(id) {
+            if (!confirm("¿Estás seguro de eliminar este insumo?")) return;
+            try {
+                await db.from('insumos').delete().eq('id', id);
+                await cargarInsumos();
+                await cargarProductos();
+                renderizarActual();
+            } catch (err) {
+                alert("Error al eliminar insumo: " + err.message);
+            }
+        }
+
+        /* --- CARGAR STOCK DE INSUMO --- */
+
+        function abrirAjusteStock(id, nombre, stockActual) {
+            document.getElementById('ajuste-ins-id').value = id;
+            document.getElementById('ajuste-ins-nombre').innerText = `Insumo: ${nombre}`;
+            document.getElementById('ajuste-ins-actual').innerText = `Stock actual: ${stockActual} unidades`;
+            document.getElementById('ajuste-cantidad').value = '';
+            document.getElementById('modal-ajuste-stock').style.display = 'flex';
+            document.getElementById('ajuste-cantidad').focus();
+        }
+
+        async function guardarAjusteStock() {
+            const id = document.getElementById('ajuste-ins-id').value;
+            const cantidadAgregar = parseFloat(document.getElementById('ajuste-cantidad').value);
+
+            if (isNaN(cantidadAgregar) || cantidadAgregar <= 0) {
+                alert("⚠️ Ingresa una cantidad válida mayor a 0.");
+                return;
+            }
+
+            try {
+                const ins = listaInsumos.find(i => i.id == id);
+                const nuevoStock = (parseFloat(ins.stock) || 0) + cantidadAgregar;
+
+                await db.from('insumos').update({ stock: nuevoStock }).eq('id', id);
+
+                cerrarModal('modal-ajuste-stock');
+                await cargarInsumos();
+                await cargarProductos();
+                renderizarActual();
+            } catch (err) {
+                alert("Error al ajustar el stock: " + err.message);
+            }
+        }
+    </script>
+</body>
+</html>

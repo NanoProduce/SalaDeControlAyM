@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tasa del Día - SDC</title>
+    <!-- SUPABASE CLIENT SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- FAVICON -->
+    <link rel="icon" type="image/png" href="logo.png">
+    <style>
+        :root {
+            --primary: #ff4757;
+            --primary-dark: #e84118;
+            --dark: #2f3542;
+            --light: #f1f2f6;
+            --white: #ffffff;
+            --border: #dfe4ea;
+            --success: #2ed573;
+            --warning: #ffa502;
+            --danger: #ff6b81;
+            --blue: #1e90ff;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--light); min-height: 100vh; display: flex; flex-direction: column; color: var(--dark); padding-bottom: 30px; }
+
+        /* NAVBAR Y MENÚ HAMBURGUESA */
+        nav { background-color: var(--dark); padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 100; }
+        .nav-brand { color: var(--white); font-weight: bold; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+        .menu-toggle { display: none; background: none; border: none; color: var(--white); font-size: 24px; cursor: pointer; outline: none; }
+        
+        .nav-links { display: flex; gap: 8px; }
+        .nav-links a { text-decoration: none; border: 1px solid var(--border); color: var(--white); padding: 8px 12px; border-radius: 6px; font-weight: bold; font-size: 13px; transition: 0.2s; white-space: nowrap; }
+        .nav-links a:hover, .nav-links a.activo { background-color: var(--primary); border-color: var(--primary); }
+
+        @media (max-width: 768px) {
+            .menu-toggle { display: block; }
+            .nav-links { display: none; width: 100%; position: absolute; top: 100%; left: 0; background-color: var(--dark); flex-direction: column; padding: 10px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+            .nav-links.activo { display: flex; }
+            .nav-links a { width: 100%; text-align: center; padding: 10px; }
+        }
+
+        /* CONTENEDOR PRINCIPAL */
+        .main-container { max-width: 900px; margin: 0 auto; width: 100%; padding: 15px; display: flex; flex-direction: column; gap: 15px; }
+        @media (max-width: 768px) { .main-container { padding: 10px; gap: 12px; } }
+
+        /* HEADER PANEL */
+        .header-panel { background: var(--white); padding: 12px 15px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .header-panel h1 { font-size: 18px; color: var(--dark); display: flex; align-items: center; gap: 8px; }
+
+        /* SECCIÓN TASA ACTUAL (DESTACADO) */
+        .tasa-hero { background: linear-gradient(135deg, var(--dark), #3a404d); color: white; border-radius: 10px; padding: 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.08); }
+        .tasa-hero-label { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8; font-weight: 600; }
+        .tasa-hero-value { font-size: 38px; font-weight: 800; color: var(--success); }
+        .tasa-hero-sub { font-size: 12px; opacity: 0.7; }
+
+        /* FORMULARIO Y SECCIONES */
+        .card-box { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
+        .card-box h2 { font-size: 15px; color: var(--dark); border-bottom: 2px solid var(--light); padding-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+
+        .form-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 220px; }
+        .form-group label { font-size: 13px; font-weight: bold; color: var(--dark); }
+        .form-group input { padding: 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 16px; outline: none; background: white; font-weight: bold; }
+        .form-group input:focus { border-color: var(--primary); }
+
+        .btn-guardar { background: var(--success); color: white; border: none; padding: 12px 20px; border-radius: 6px; font-weight: bold; font-size: 14px; cursor: pointer; transition: 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; height: 46px; }
+        .btn-guardar:hover { background: #26af5f; }
+
+        @media (max-width: 576px) {
+            .form-row { flex-direction: column; align-items: stretch; }
+            .form-group { width: 100%; min-width: 100%; }
+            .btn-guardar { width: 100%; }
+        }
+
+        /* TABLA HISTORIAL RESPONSIVA */
+        .tabla-contenedor { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+        th { background: #f8f9fa; padding: 10px; border-bottom: 2px solid var(--border); font-weight: bold; color: var(--dark); white-space: nowrap; }
+        td { padding: 10px; border-bottom: 1px solid var(--border); color: var(--dark); white-space: nowrap; vertical-align: middle; }
+        tr:hover { background-color: #f1f2f6; }
+
+        .vacio { text-align: center; color: #747d8c; padding: 20px; font-size: 13px; background: #f8f9fa; border-radius: 6px; border: 1px dashed var(--border); }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR RESPONSIVO -->
+    <nav>
+        <div class="nav-brand">
+            Sala De Control
+        </div>
+        <button class="menu-toggle" onclick="toggleNavMenu()">☰</button>
+        <div class="nav-links" id="navLinks">
+            <a href="index.html">Nueva Venta</a>
+            <a href="inventario.html">Inventario</a>
+            <a href="tasa.html" class="activo">Tasa del Día</a>
+            <a href="ventas.html">Ventas</a>
+            <a href="cierre.html">Cierre de Caja</a>
+        </div>
+    </nav>
+
+    <!-- CONTENEDOR PRINCIPAL -->
+    <div class="main-container">
+
+        <!-- HEADER PANEL -->
+        <div class="header-panel">
+            <h1>💵 Configuración de Tasa de Cambio</h1>
+        </div>
+
+        <!-- TARJETA HERO - TASA ACTUAL -->
+        <div class="tasa-hero">
+            <div class="tasa-hero-label">Tasa BCV / Oficial Activa</div>
+            <div class="tasa-hero-value" id="tasa-actual-display">0.00 Bs</div>
+            <div class="tasa-hero-sub" id="tasa-fecha-display">Última actualización: Cargando...</div>
+        </div>
+
+        <!-- FORMULARIO ACTUALIZAR TASA -->
+        <div class="card-box">
+            <h2>📝 Registrar Nueva Tasa del Día</h2>
+            <form id="form-tasa" onsubmit="guardarTasa(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="nueva-tasa">Monto en Bolívares (Bs) por 1 USD ($)</label>
+                        <input type="number" step="0.01" id="nueva-tasa" placeholder="Ej: 36.50" required min="0.01">
+                    </div>
+                    <button type="submit" class="btn-guardar">💾 Actualizar Tasa</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- HISTORIAL DE TASAS -->
+        <div class="card-box">
+            <h2>📜 Historial Reciente de Tasas</h2>
+            <div class="tabla-contenedor">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Fecha y Hora</th>
+                            <th>Tasa (Bs / USD)</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-historial-body">
+                        <tr>
+                            <td colspan="3" class="vacio">Cargando historial de tasas...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- JAVASCRIPT Y CONEXIÓN A SUPABASE -->
+    <script>
+        const SUPABASE_URL = 'https://zoamybqkzcguvynxrzbx.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvYW15YnFremNndXZ5bnhyemJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4OTEyMzYsImV4cCI6MjEwNDQ2NzIzNn0.nuPzT3cLUnt0VIlOa4TbZthdkOYQCK6S5vpGW8A2U5E';
+        let db = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.supabase) {
+                db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                cargarDatosTasa();
+            } else {
+                alert("Error: No se pudo cargar el SDK de Supabase.");
+            }
+        });
+
+        function toggleNavMenu() {
+            document.getElementById('navLinks').classList.toggle('activo');
+        }
+
+        async function cargarDatosTasa() {
+            await cargarTasaActual();
+            await cargarHistorialTasa();
+        }
+
+        async function cargarTasaActual() {
+            try {
+                const { data, error } = await db
+                    .from('tasa_dia')
+                    .select('*')
+                    .order('id', { ascending: false })
+                    .limit(1);
+
+                if (error) throw error;
+
+                if (data && data.length > 0) {
+                    const actual = data[0];
+                    const valor = parseFloat(actual.tasa) || 0;
+                    document.getElementById('tasa-actual-display').innerText = `${valor.toFixed(2)} Bs`;
+                    
+                    const fecha = actual.created_at ? new Date(actual.created_at).toLocaleString() : 'Fecha no registrada';
+                    document.getElementById('tasa-fecha-display').innerText = `Última actualización: ${fecha}`;
+                } else {
+                    document.getElementById('tasa-actual-display').innerText = "0.00 Bs";
+                    document.getElementById('tasa-fecha-display').innerText = "Sin registros previa de tasa.";
+                }
+            } catch (err) {
+                console.error("Error al cargar tasa actual:", err);
+            }
+        }
+
+        async function cargarHistorialTasa() {
+            try {
+                const { data, error } = await db
+                    .from('tasa_dia')
+                    .select('*')
+                    .order('id', { ascending: false })
+                    .limit(10);
+
+                if (error) throw error;
+
+                const tbody = document.getElementById('tabla-historial-body');
+                tbody.innerHTML = '';
+
+                if (!data || data.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="3" class="vacio">No hay historial de tasas registrado.</td></tr>`;
+                    return;
+                }
+
+                data.forEach((item, index) => {
+                    const valor = parseFloat(item.tasa) || 0;
+                    const fecha = item.created_at ? new Date(item.created_at).toLocaleString() : 'N/A';
+                    const esActiva = index === 0;
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${fecha}</td>
+                        <td><strong>Bs ${valor.toFixed(2)}</strong></td>
+                        <td>
+                            <span style="padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; background: ${esActiva ? '#e8f5e9' : '#f1f2f6'}; color: ${esActiva ? '#2e7d32' : '#747d8c'};">
+                                ${esActiva ? 'ACTIVA' : 'ANTERIOR'}
+                            </span>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } catch (err) {
+                console.error("Error al cargar historial:", err);
+            }
+        }
+
+        async function guardarTasa(e) {
+            e.preventDefault();
+
+            const inputTasa = document.getElementById('nueva-tasa');
+            const valorTasa = parseFloat(inputTasa.value);
+
+            if (!valorTasa || valorTasa <= 0) {
+                alert("⚠️ Por favor ingresa una tasa válida mayor a 0.");
+                return;
+            }
+
+            try {
+                const { error } = await db.from('tasa_dia').insert([{ tasa: valorTasa }]);
+                if (error) throw error;
+
+                inputTasa.value = '';
+                await cargarDatosTasa();
+                alert("✅ Tasa del día actualizada correctamente.");
+            } catch (err) {
+                console.error("Error al guardar la tasa:", err);
+                alert("Error al actualizar la tasa: " + err.message);
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ventas del Turno - SDC</title>
+    <!-- SUPABASE CLIENT SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- FAVICON -->
+    <link rel="icon" type="image/png" href="logo.png">
+    <style>
+        :root {
+            --primary: #ff4757;
+            --primary-dark: #e84118;
+            --dark: #2f3542;
+            --light: #f1f2f6;
+            --white: #ffffff;
+            --border: #dfe4ea;
+            --success: #2ed573;
+            --warning: #ffa502;
+            --danger: #ff6b81;
+            --blue: #1e90ff;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--light); min-height: 100vh; display: flex; flex-direction: column; color: var(--dark); padding-bottom: 30px; }
+
+        /* NAVBAR Y MENÚ HAMBURGUESA */
+        nav { background-color: var(--dark); padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 100; }
+        .nav-brand { color: var(--white); font-weight: bold; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+        .menu-toggle { display: none; background: none; border: none; color: var(--white); font-size: 24px; cursor: pointer; outline: none; }
+        
+        .nav-links { display: flex; gap: 8px; }
+        .nav-links a { text-decoration: none; border: 1px solid var(--border); color: var(--white); padding: 8px 12px; border-radius: 6px; font-weight: bold; font-size: 13px; transition: 0.2s; white-space: nowrap; }
+        .nav-links a:hover, .nav-links a.activo { background-color: var(--primary); border-color: var(--primary); }
+
+        @media (max-width: 768px) {
+            .menu-toggle { display: block; }
+            .nav-links { display: none; width: 100%; position: absolute; top: 100%; left: 0; background-color: var(--dark); flex-direction: column; padding: 10px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+            .nav-links.activo { display: flex; }
+            .nav-links a { width: 100%; text-align: center; padding: 10px; }
+        }
+
+        /* CONTENEDOR PRINCIPAL */
+        .main-container { max-width: 1200px; margin: 0 auto; width: 100%; padding: 15px; display: flex; flex-direction: column; gap: 15px; }
+        @media (max-width: 768px) { .main-container { padding: 8px; gap: 10px; } }
+
+        /* HEADER PANEL */
+        .header-panel { background: var(--white); padding: 12px 15px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .header-panel h1 { font-size: 18px; color: var(--dark); display: flex; align-items: center; gap: 8px; }
+        .tasa-badge { background: var(--dark); color: white; padding: 4px 10px; border-radius: 20px; font-weight: bold; font-size: 12px; }
+        .tasa-badge span { color: var(--success); }
+
+        /* RESUMEN DE VENTAS (KPIS) */
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+        @media (max-width: 768px) { .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; } }
+        @media (max-width: 480px) { .kpi-grid { grid-template-columns: 1fr; } }
+
+        .kpi-card { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .kpi-title { font-size: 11px; font-weight: bold; color: #747d8c; text-transform: uppercase; }
+        .kpi-val { font-size: 22px; font-weight: 800; color: var(--dark); }
+
+        /* TOOLBAR Y FILTROS */
+        .card-box { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.03); }
+        .card-box h2 { font-size: 15px; color: var(--dark); border-bottom: 2px solid var(--light); padding-bottom: 8px; display: flex; align-items: center; justify-content: space-between; }
+
+        .filters-grid { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; align-items: flex-end; }
+        @media (max-width: 900px) { .filters-grid { grid-template-columns: 1fr 1fr; } }
+        @media (max-width: 576px) { .filters-grid { grid-template-columns: 1fr; } }
+
+        .filter-group { display: flex; flex-direction: column; gap: 4px; }
+        .filter-group label { font-size: 12px; font-weight: bold; color: var(--dark); }
+        .filter-group input, .filter-group select { padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 16px; outline: none; background: white; }
+        .filter-group input:focus, .filter-group select:focus { border-color: var(--primary); }
+
+        /* TABLA DE VENTAS RESPONSIVA */
+        .tabla-contenedor { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+        th { background: #f8f9fa; padding: 10px; border-bottom: 2px solid var(--border); font-weight: bold; color: var(--dark); white-space: nowrap; }
+        td { padding: 10px; border-bottom: 1px solid var(--border); color: var(--dark); white-space: nowrap; vertical-align: middle; }
+        tr:hover { background-color: #f1f2f6; }
+
+        .badge-metodo { background: #e3f2fd; color: #1565c0; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-block; margin-right: 4px; }
+        .badge-estado { padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; display: inline-block; }
+        .estado-completada { background: #e8f5e9; color: #2e7d32; }
+        .estado-anulada { background: #ffebee; color: #c62828; }
+
+        .btn-icon { border: none; background: #f1f2f6; border: 1px solid var(--border); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: 0.15s; }
+        .btn-icon:hover { background: var(--dark); color: white; }
+        .btn-view:hover { background: var(--blue); color: white; border-color: var(--blue); }
+        .btn-edit:hover { background: var(--warning); color: white; border-color: var(--warning); }
+        .btn-cancel:hover { background: var(--danger); color: white; border-color: var(--danger); }
+
+        .vacio { text-align: center; color: #747d8c; padding: 25px; font-size: 13px; background: #f8f9fa; border-radius: 6px; border: 1px dashed var(--border); }
+
+        /* MODAL RESPONSIVO DETALLE Y EDICIÓN DE VENTA */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 15px; }
+        .modal-content { background: white; border-radius: 8px; width: 100%; max-width: 520px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: flex; flex-direction: column; gap: 14px; max-height: 90vh; overflow-y: auto; }
+        .modal-content h3 { font-size: 16px; color: var(--dark); border-bottom: 2px solid var(--light); padding-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+
+        .ticket-list { display: flex; flex-direction: column; gap: 8px; font-size: 13px; background: #f8f9fa; padding: 12px; border-radius: 6px; border: 1px solid var(--border); }
+        .ticket-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed var(--border); padding-bottom: 6px; }
+        .ticket-item:last-child { border-bottom: none; padding-bottom: 0; }
+
+        .ticket-totales { display: flex; flex-direction: column; gap: 4px; font-weight: bold; background: #e3f2fd; padding: 10px; border-radius: 6px; font-size: 14px; color: #0d47a1; }
+
+        .modal-acciones { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
+        .btn-modal-close { background: var(--dark); color: white; border: none; padding: 10px 18px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR RESPONSIVO -->
+    <nav>
+        <div class="nav-brand">
+            Sala De Control
+        </div>
+        <button class="menu-toggle" onclick="toggleNavMenu()">☰</button>
+        <div class="nav-links" id="navLinks">
+            <a href="index.html">Nueva Venta</a>
+            <a href="inventario.html">Inventario</a>
+            <a href="tasa.html">Tasa del Día</a>
+            <a href="ventas.html" class="activo">Ventas</a>
+            <a href="cierre.html">Cierre de Caja</a>
+        </div>
+    </nav>
+
+    <!-- CONTENEDOR PRINCIPAL -->
+    <div class="main-container">
+
+        <!-- HEADER PANEL -->
+        <div class="header-panel">
+            <h1>📊 Ventas del Turno Actual</h1>
+            <div class="tasa-badge">Tasa del Día: $<span id="tasa-valor">0.00</span> Bs</div>
+        </div>
+
+        <!-- RESUMEN DE VENTAS (KPIS) -->
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-title">Ventas Totales ($)</div>
+                <div class="kpi-val" id="kpi-total-usd" style="color:var(--success);">$0.00</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">Ventas Totales (Bs)</div>
+                <div class="kpi-val" id="kpi-total-bs" style="color:var(--blue);">0.00 Bs</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">Transacciones</div>
+                <div class="kpi-val" id="kpi-count-ventas">0</div>
+            </div>
+        </div>
+
+        <!-- FILTROS Y BÚSQUEDA -->
+        <div class="card-box">
+            <div class="filters-grid">
+                <div class="filter-group">
+                    <label for="input-buscar">🔍 Buscar Venta</label>
+                    <input type="text" id="input-buscar" placeholder="N° Orden, Cliente o Detalles..." oninput="filtrarVentas()">
+                </div>
+                <div class="filter-group">
+                    <label for="filtro-fecha">📅 Fecha</label>
+                    <input type="date" id="filtro-fecha" onchange="filtrarVentas()">
+                </div>
+                <div class="filter-group">
+                    <label for="filtro-metodo">💳 Método de Pago</label>
+                    <select id="filtro-metodo" onchange="filtrarVentas()">
+                        <option value="">Todos</option>
+                        <option value="Efectivo USD">Efectivo USD</option>
+                        <option value="Efectivo BS">Efectivo Bs</option>
+                        <option value="Pago Movil">Pago Móvil</option>
+                        <option value="Punto">Punto de Venta</option>
+                        <option value="Zelle">Zelle</option>
+                        <option value="Credito">Crédito</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <button type="button" onclick="limpiarFiltros()" class="btn-icon" style="height: 42px; font-weight: bold; background: var(--dark); color: white;">🧹 Limpiar Filtros</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TABLA DE VENTAS -->
+        <div class="card-box">
+            <h2>
+                <span>📋 Registros del Turno</span>
+                <span id="ventas-count" style="font-size:12px; font-weight:normal; color:#747d8c;">0 ventas</span>
+            </h2>
+
+            <div class="tabla-contenedor">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>N° Venta</th>
+                            <th>Fecha y Hora</th>
+                            <th>Cliente</th>
+                            <th>Método(s)</th>
+                            <th>Total ($)</th>
+                            <th>Total (Bs)</th>
+                            <th>Estado</th>
+                            <th style="text-align: right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-ventas-body">
+                        <tr>
+                            <td colspan="8" class="vacio">Cargando ventas del turno actual...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- MODAL DETALLE DE VENTA -->
+    <div id="modal-detalle" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <h3>
+                <span id="detalle-titulo">📄 Detalle de Venta</span>
+                <span id="detalle-id" style="color:var(--primary); font-size:14px;">#000</span>
+            </h3>
+
+            <div id="detalle-info" style="font-size: 13px; color: var(--dark); display: flex; flex-direction: column; gap: 4px;">
+                <!-- Dinámico vía JS -->
+            </div>
+
+            <div class="ticket-list" id="detalle-productos">
+                <!-- Productos dinámicos -->
+            </div>
+
+            <div class="ticket-totales" id="detalle-totales">
+                <!-- Totales dinámicos -->
+            </div>
+
+            <div class="modal-acciones">
+                <button type="button" class="btn-modal-close" onclick="cerrarModal('modal-detalle')">Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL EDITAR VENTA -->
+    <div id="modal-editar" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <h3>
+                <span>✏️ Editar Venta</span>
+                <span id="editar-id" style="color:var(--primary); font-size:14px;">#000</span>
+            </h3>
+
+            <form id="form-editar-venta" onsubmit="guardarEdicionVenta(event)" style="display: flex; flex-direction: column; gap: 12px;">
+                <input type="hidden" id="edit-venta-id">
+                
+                <div class="filter-group">
+                    <label for="edit-cliente">Cliente:</label>
+                    <input type="text" id="edit-cliente" placeholder="Nombre del cliente" required>
+                </div>
+
+                <div class="filter-group">
+                    <label for="edit-metodo">Método de Pago:</label>
+                    <select id="edit-metodo" required>
+                        <option value="Efectivo USD">Efectivo USD</option>
+                        <option value="Efectivo BS">Efectivo Bs</option>
+                        <option value="Pago Movil">Pago Móvil</option>
+                        <option value="Punto">Punto de Venta</option>
+                        <option value="Zelle">Zelle</option>
+                        <option value="Credito">Crédito</option>
+                    </select>
+                </div>
+
+                <div class="filter-group">
+                    <label for="edit-total-usd">Total ($):</label>
+                    <input type="number" step="0.01" id="edit-total-usd" required oninput="calcularTotalBsEdicion()">
+                </div>
+
+                <div class="filter-group">
+                    <label for="edit-total-bs">Total (Bs):</label>
+                    <input type="number" step="0.01" id="edit-total-bs" required>
+                </div>
+
+                <div class="modal-acciones">
+                    <button type="button" class="btn-modal-close" style="background:#747d8c;" onclick="cerrarModal('modal-editar')">Cancelar</button>
+                    <button type="submit" class="btn-modal-close" style="background:var(--success);">Guardar Cambios</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT Y CONEXIÓN A SUPABASE -->
+    <script>
+        const SUPABASE_URL = 'https://zoamybqkzcguvynxrzbx.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvYW15YnFremNndXZ5bnhyemJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4OTEyMzYsImV4cCI6MjEwNDQ2NzIzNn0.nuPzT3cLUnt0VIlOa4TbZthdkOYQCK6S5vpGW8A2U5E';
+
+        let db = null;
+        let tasaCambio = 1;
+        let todasVentas = [];
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.supabase) {
+                db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                inicializarVentas();
+            } else {
+                alert("Error: No se pudo cargar el SDK de Supabase.");
+            }
+        });
+
+        function toggleNavMenu() {
+            document.getElementById('navLinks').classList.toggle('activo');
+        }
+
+        async function inicializarVentas() {
+            await cargarTasa();
+            await cargarVentas();
+        }
+
+        async function cargarTasa() {
+            try {
+                const { data } = await db.from('tasa_dia').select('tasa').order('id', { ascending: false }).limit(1);
+                if (data && data.length > 0) {
+                    tasaCambio = parseFloat(data[0].tasa) || 1;
+                }
+                document.getElementById('tasa-valor').innerText = tasaCambio.toFixed(2);
+            } catch (e) {
+                console.error("Error al obtener la tasa:", e);
+            }
+        }
+
+        async function cargarVentas() {
+            try {
+                // Solo consulta las ventas que NO han sido cerradas (cerrado: false)
+                const { data, error } = await db
+                    .from('ventas')
+                    .select('*')
+                    .eq('cerrado', false)
+                    .order('created_at', { ascending: false });
+
+                if (error) throw error;
+
+                todasVentas = data || [];
+                filtrarVentas();
+            } catch (err) {
+                console.error("Error al cargar ventas:", err);
+                alert("Error al obtener las ventas del turno actual desde Supabase.");
+            }
+        }
+
+        function filtrarVentas() {
+            const busqueda = document.getElementById('input-buscar').value.toLowerCase().trim();
+            const fechaSelec = document.getElementById('filtro-fecha').value;
+            const metodoSelec = document.getElementById('filtro-metodo').value.toLowerCase();
+
+            const filtradas = todasVentas.filter(v => {
+                const idStr = v.id ? v.id.toString() : '';
+                const clienteStr = v.cliente ? v.cliente.toLowerCase() : '';
+                const cumpleBusqueda = busqueda === '' || idStr.includes(busqueda) || clienteStr.includes(busqueda);
+
+                let cumpleFecha = true;
+                if (fechaSelec && v.created_at) {
+                    const fechaVenta = v.created_at.split('T')[0];
+                    cumpleFecha = (fechaVenta === fechaSelec);
+                }
+
+                let cumpleMetodo = true;
+                if (metodoSelec) {
+                    const metodosStr = JSON.stringify(v.metodos_pago || v.metodo_pago || '').toLowerCase();
+                    cumpleMetodo = metodosStr.includes(metodoSelec);
+                }
+
+                return cumpleBusqueda && cumpleFecha && cumpleMetodo;
+            });
+
+            actualizarKPIs(filtradas);
+            renderizarTabla(filtradas);
+        }
+
+        function limpiarFiltros() {
+            document.getElementById('input-buscar').value = '';
+            document.getElementById('filtro-fecha').value = '';
+            document.getElementById('filtro-metodo').value = '';
+            filtrarVentas();
+        }
+
+        function actualizarKPIs(lista) {
+            let totalUsd = 0;
+            let totalBs = 0;
+            let count = 0;
+
+            lista.forEach(v => {
+                if (v.estado !== 'anulada') {
+                    const usd = parseFloat(v.total_usd) || 0;
+                    const bs = parseFloat(v.total_bs) || (usd * tasaCambio);
+                    totalUsd += usd;
+                    totalBs += bs;
+                    count++;
+                }
+            });
+
+            document.getElementById('kpi-total-usd').innerText = `$${totalUsd.toFixed(2)}`;
+            document.getElementById('kpi-total-bs').innerText = `${totalBs.toFixed(2)} Bs`;
+            document.getElementById('kpi-count-ventas').innerText = count;
+            document.getElementById('ventas-count').innerText = `${lista.length} registros`;
+        }
+
+        function renderizarTabla(lista) {
+            const tbody = document.getElementById('tabla-ventas-body');
+            tbody.innerHTML = '';
+
+            if (lista.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="vacio">No hay ventas registradas en el turno actual.</td></tr>`;
+                return;
+            }
+
+            lista.forEach(v => {
+                const id = v.id;
+                const fecha = v.created_at ? new Date(v.created_at).toLocaleString() : 'N/A';
+                const cliente = v.cliente || 'Cliente General';
+                const totalUsd = parseFloat(v.total_usd) || 0;
+                const totalBs = parseFloat(v.total_bs) || (totalUsd * tasaCambio);
+                const estado = v.estado || 'completada';
+
+                // Formatear métodos
+                let metodosHTML = `<span class="badge-metodo">${v.metodo_pago || 'Efectivo USD'}</span>`;
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>#${id}</strong></td>
+                    <td>${fecha}</td>
+                    <td>${cliente}</td>
+                    <td>${metodosHTML}</td>
+                    <td><strong>$${totalUsd.toFixed(2)}</strong></td>
+                    <td>Bs ${totalBs.toFixed(2)}</td>
+                    <td>
+                        <span class="badge-estado ${estado === 'anulada' ? 'estado-anulada' : 'estado-completada'}">
+                            ${estado.toUpperCase()}
+                        </span>
+                    </td>
+                    <td style="text-align: right;">
+                        <div style="display:flex; gap:6px; justify-content: flex-end;">
+                            <button class="btn-icon btn-view" title="Ver Detalle" onclick="verDetalleVenta(${id})">👁️</button>
+                            ${estado !== 'anulada' ? `
+                                <button class="btn-icon btn-edit" title="Editar Venta" onclick="abrirModalEditar(${id})">✏️</button>
+                                <button class="btn-icon btn-cancel" title="Anular Venta" onclick="anularVenta(${id})">🚫</button>
+                            ` : ''}
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        /* --- DETALLE, EDICIÓN Y OPERACIONES --- */
+
+        function verDetalleVenta(id) {
+            const venta = todasVentas.find(v => v.id === id);
+            if (!venta) return;
+
+            document.getElementById('detalle-id').innerText = `#${venta.id}`;
+            document.getElementById('detalle-info').innerHTML = `
+                <div><strong>Fecha:</strong> ${venta.created_at ? new Date(venta.created_at).toLocaleString() : 'N/A'}</div>
+                <div><strong>Cliente:</strong> ${venta.cliente || 'Cliente General'}</div>
+                <div><strong>Estado:</strong> ${venta.estado || 'Completada'}</div>
+            `;
+
+            // Productos
+            const divProds = document.getElementById('detalle-productos');
+            divProds.innerHTML = '<strong>Productos Vendidos:</strong>';
+
+            const items = venta.productos || venta.items || [];
+            if (Array.isArray(items) && items.length > 0) {
+                items.forEach(it => {
+                    const cant = it.cantidad || 1;
+                    const nom = it.nombre || 'Producto';
+                    const prec = parseFloat(it.precio || it.precio_usd) || 0;
+                    const sub = cant * prec;
+
+                    divProds.innerHTML += `
+                        <div class="ticket-item">
+                            <span>${cant}x ${nom}</span>
+                            <strong>$${sub.toFixed(2)}</strong>
+                        </div>
+                    `;
+                });
+            } else {
+                divProds.innerHTML += `<div style="color:#747d8c; font-style:italic;">No se registraron ítems individuales.</div>`;
+            }
+
+            // Totales
+            const totalUsd = parseFloat(venta.total_usd) || 0;
+            const totalBs = parseFloat(venta.total_bs) || (totalUsd * tasaCambio);
+
+            document.getElementById('detalle-totales').innerHTML = `
+                <div style="display:flex; justify-content:space-between;">
+                    <span>Total USD:</span>
+                    <strong>$${totalUsd.toFixed(2)}</strong>
+                </div>
+                <div style="display:flex; justify-content:space-between;">
+                    <span>Total Bolívares:</span>
+                    <strong>Bs ${totalBs.toFixed(2)}</strong>
+                </div>
+            `;
+
+            document.getElementById('modal-detalle').style.display = 'flex';
+        }
+
+        /* --- FUNCIONES DE EDICIÓN --- */
+
+        function abrirModalEditar(id) {
+            const venta = todasVentas.find(v => v.id === id);
+            if (!venta) return;
+
+            document.getElementById('edit-venta-id').value = venta.id;
+            document.getElementById('editar-id').innerText = `#${venta.id}`;
+            document.getElementById('edit-cliente').value = venta.cliente || '';
+            document.getElementById('edit-metodo').value = venta.metodo_pago || 'Efectivo USD';
+
+            const totalUsd = parseFloat(venta.total_usd) || 0;
+            const totalBs = parseFloat(venta.total_bs) || (totalUsd * tasaCambio);
+
+            document.getElementById('edit-total-usd').value = totalUsd.toFixed(2);
+            document.getElementById('edit-total-bs').value = totalBs.toFixed(2);
+
+            document.getElementById('modal-editar').style.display = 'flex';
+        }
+
+        function calcularTotalBsEdicion() {
+            const usd = parseFloat(document.getElementById('edit-total-usd').value) || 0;
+            document.getElementById('edit-total-bs').value = (usd * tasaCambio).toFixed(2);
+        }
+
+        async function guardarEdicionVenta(e) {
+            e.preventDefault();
+            const id = document.getElementById('edit-venta-id').value;
+            const cliente = document.getElementById('edit-cliente').value.trim();
+            const metodo = document.getElementById('edit-metodo').value;
+            const totalUsd = parseFloat(document.getElementById('edit-total-usd').value) || 0;
+            const totalBs = parseFloat(document.getElementById('edit-total-bs').value) || 0;
+
+            try {
+                const { error } = await db.from('ventas').update({
+                    cliente: cliente,
+                    metodo_pago: metodo,
+                    total_usd: totalUsd,
+                    total_bs: totalBs
+                }).eq('id', id);
+
+                if (error) throw error;
+
+                alert("✅ Venta actualizada exitosamente.");
+                cerrarModal('modal-editar');
+                await cargarVentas();
+            } catch (err) {
+                console.error("Error al actualizar venta:", err);
+                alert("Error al actualizar la venta: " + err.message);
+            }
+        }
+
+        function cerrarModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        async function anularVenta(id) {
+            if (!confirm(`¿Estás seguro de que deseas anular la venta #${id}? Esta acción cambiará el estado del registro.`)) return;
+
+            try {
+                const { error } = await db.from('ventas').update({ estado: 'anulada' }).eq('id', id);
+                if (error) throw error;
+
+                alert("✅ Venta anulada exitosamente.");
+                await cargarVentas();
+            } catch (err) {
+                console.error("Error al anular venta:", err);
+                alert("Error al anular la venta: " + err.message);
+            }
+        }
+    </script>
+</body>
+</html>

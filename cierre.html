@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cierre de Caja - SDC</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --primary: #ff4757;
+            --dark: #2f3542;
+            --light: #f1f2f6;
+            --white: #ffffff;
+            --border: #dfe4ea;
+            --success: #2ed573;
+            --warning: #ffa502;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--light); min-height: 100vh; display: flex; flex-direction: column; padding: 15px; }
+
+        /* NAVEGACIÓN ESTILO SALA DE CONTROL */
+        .navbar {
+            background-color: #2c323f;
+            padding: 14px 20px;
+            border-radius: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .nav-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: auto;
+        }
+
+        .brand {
+            color: #ffffff;
+            font-size: 18px;
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .btn-burger {
+            display: none;
+            background: transparent;
+            border: none;
+            color: #ffffff;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 14px;
+            padding: 8px 18px;
+            border-radius: 8px;
+            border: 1px solid #6b7280;
+            background-color: transparent;
+            transition: all 0.2s ease;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .nav-links a:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-color: #ffffff;
+        }
+
+        .nav-links a.activo {
+            background-color: var(--primary);
+            border-color: var(--primary);
+            color: #ffffff;
+        }
+
+        /* VISTA MÓVIL / VERTICAL */
+        @media (max-width: 820px), (orientation: portrait) {
+            .navbar {
+                flex-direction: column;
+                align-items: stretch;
+                padding: 14px;
+            }
+
+            .nav-top {
+                width: 100%;
+            }
+
+            .btn-burger {
+                display: block;
+            }
+
+            .nav-links {
+                display: none;
+                flex-direction: column;
+                width: 100%;
+                gap: 10px;
+                margin-top: 14px;
+            }
+
+            .nav-links.abierto {
+                display: flex;
+            }
+
+            .nav-links a {
+                width: 100%;
+                display: block;
+                padding: 12px;
+            }
+        }
+
+        /* CONTENEDOR Y TARJETAS */
+        .contenedor { max-width: 900px; margin: 0 auto; width: 100%; display: flex; flex-direction: column; gap: 15px; flex: 1; }
+        .tarjeta { background: var(--white); border-radius: 8px; border: 1px solid var(--border); padding: 20px; }
+        .encabezado-cierre { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--light); padding-bottom: 12px; margin-bottom: 15px; flex-wrap: wrap; gap: 10px; }
+
+        /* RESUMEN DESTACADO EN GRID RESPONSIVO */
+        .grid-totales { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .caja-resumen { background: #f8f9fa; border: 1px solid var(--border); padding: 15px; border-radius: 6px; text-align: center; }
+        .caja-resumen span { font-size: 12px; color: #747d8c; font-weight: bold; display: block; margin-bottom: 5px; }
+        .caja-resumen strong { font-size: 22px; color: var(--dark); word-break: break-all; }
+        .caja-resumen.destacado strong { color: var(--success); }
+
+        /* TABLA DE DESGLOSE RESPONSIVA */
+        .contenedor-tabla { width: 100%; overflow-x: auto; margin-bottom: 20px; border-radius: 6px; border: 1px solid var(--border); }
+        .tabla-desglose { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 320px; }
+        .tabla-desglose th, .tabla-desglose td { padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left; }
+        .tabla-desglose th { background: var(--dark); color: white; white-space: nowrap; }
+        .tabla-desglose td.der, .tabla-desglose th.der { text-align: right; }
+
+        .btn-cierre { width: 100%; padding: 16px; background: var(--primary); color: white; border: none; border-radius: 6px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn-cierre:hover { opacity: 0.9; }
+        .btn-cierre:disabled { background: #747d8c; cursor: not-allowed; }
+
+        @media (max-width: 480px) {
+            body { padding: 10px; }
+            .tarjeta { padding: 12px; }
+            .encabezado-cierre h2 { font-size: 18px; }
+            .grid-totales { grid-template-columns: 1fr; }
+            .btn-cierre { font-size: 16px; padding: 14px; }
+        }
+
+        /* ESTILOS DE IMPRESIÓN (TICKET 80MM) */
+        #area-impresion { display: none; }
+        @media print {
+            body * { visibility: hidden; }
+            #area-impresion, #area-impresion * { visibility: visible; }
+            #area-impresion { position: absolute; left: 0; top: 0; width: 80mm; padding: 8px; font-family: monospace; font-size: 12px; color: #000; display: block !important; }
+            .ticket-linea { border-bottom: 1px dashed #000; margin: 6px 0; }
+            .ticket-header { text-align: center; margin-bottom: 8px; }
+            .ticket-tabla { width: 100%; border-collapse: collapse; margin: 6px 0; }
+            .ticket-tabla td { padding: 2px 0; }
+            .ticket-tabla td.der { text-align: right; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="nav-top">
+            <span class="brand">Sala De Control</span>
+            <button class="btn-burger" id="btn-burger" aria-label="Abrir Menú">☰</button>
+        </div>
+        <div class="nav-links" id="nav-links">
+            <a href="index.html">Nueva Venta</a>
+            <a href="inventario.html">Inventario</a>
+            <a href="tasa.html">Tasa del Día</a>
+            <a href="ventas.html">Ventas</a>
+            <a href="cierre.html" class="activo">Cierre de Caja</a>
+        </div>
+    </nav>
+
+    <div class="contenedor">
+        <div class="tarjeta">
+            <div class="encabezado-cierre">
+                <h2>Resumen de Turno Actual</h2>
+                <span id="fecha-actual" style="font-size: 13px; color: #747d8c; font-weight: bold;"></span>
+            </div>
+
+            <div class="grid-totales">
+                <div class="caja-resumen">
+                    <span>Ventas Realizadas</span>
+                    <strong id="cant-ventas">0</strong>
+                </div>
+                <div class="caja-resumen destacado">
+                    <span>Total Ingreso USD</span>
+                    <strong id="total-usd">$0.00</strong>
+                </div>
+                <div class="caja-resumen destacado">
+                    <span>Total Ingreso Bs</span>
+                    <strong id="total-bs">Bs 0.00</strong>
+                </div>
+            </div>
+
+            <h3 style="font-size: 15px; margin-bottom: 10px; color: var(--dark);">Desglose por Métodos de Pago</h3>
+            
+            <div class="contenedor-tabla">
+                <table class="tabla-desglose">
+                    <thead>
+                        <tr>
+                            <th>Método</th>
+                            <th class="der">Total USD</th>
+                            <th class="der">Total Bs</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-cuerpo-pagos">
+                        <tr><td colspan="3" style="text-align: center;">Cargando ventas del turno...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <button class="btn-cierre" id="btn-ejecutar-cierre" onclick="procesarCierreCaja()">Realizar Cierre de Caja e Imprimir Ticket</button>
+        </div>
+    </div>
+
+    <div id="area-impresion"></div>
+
+    <script>
+        const { createClient } = window.supabase;
+        const SUPABASE_URL = 'https://zoamybqkzcguvynxrzbx.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvYW15YnFremNndXZ5bnhyemJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4OTEyMzYsImV4cCI6MjEwNDQ2NzIzNn0.nuPzT3cLUnt0VIlOa4TbZthdkOYQCK6S5vpGW8A2U5E';
+        const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let ventasSinCerrar = [];
+        let resumenMetodos = {};
+        let totalCajaUSD = 0;
+        let totalCajaBS = 0;
+        let totalCreditoUSD = 0;
+        let tasaCambioDia = 0;
+
+        // MENÚ HAMBURGUESA
+        const btnBurger = document.getElementById('btn-burger');
+        const navLinks = document.getElementById('nav-links');
+
+        btnBurger.addEventListener('click', () => {
+            navLinks.classList.toggle('abierto');
+        });
+
+        async function inicializar() {
+            await obtenerTasaDelDia();
+            await cargarVentasTurno();
+        }
+
+        async function obtenerTasaDelDia() {
+            try {
+                const { data } = await db.from('tasa_dia').select('tasa').order('id', { ascending: false }).limit(1);
+                if (data && data.length > 0) tasaCambioDia = parseFloat(data[0].tasa);
+            } catch (e) { console.error(e); }
+        }
+
+        async function cargarVentasTurno() {
+            try {
+                const { data, error } = await db
+                    .from('ventas')
+                    .select('*')
+                    .eq('cerrado', false);
+
+                if (error) throw error;
+                ventasSinCerrar = data || [];
+
+                calcularResumen();
+            } catch (err) {
+                console.error("Error al cargar ventas:", err);
+            }
+        }
+
+        function calcularResumen() {
+            resumenMetodos = {};
+            totalCajaUSD = 0;
+            totalCajaBS = 0;
+            totalCreditoUSD = 0;
+
+            ventasSinCerrar.forEach(v => {
+                const metodosTexto = v.metodo_pago || "Efectivo USD";
+                const partes = metodosTexto.split(', ');
+
+                partes.forEach(p => {
+                    let nombreMetodo = p.trim();
+                    let montoUSD = parseFloat(v.total_usd);
+
+                    const match = p.match(/(.*)\s\(\$(\d+\.?\d*)\)/);
+                    if (match) {
+                        nombreMetodo = match[1].trim();
+                        montoUSD = parseFloat(match[2]);
+                    }
+
+                    const montoBS = montoUSD * tasaCambioDia;
+
+                    if (!resumenMetodos[nombreMetodo]) {
+                        resumenMetodos[nombreMetodo] = { usd: 0, bs: 0 };
+                    }
+
+                    resumenMetodos[nombreMetodo].usd += montoUSD;
+                    resumenMetodos[nombreMetodo].bs += montoBS;
+
+                    if (nombreMetodo === 'Crédito' || nombreMetodo === 'Credito') {
+                        totalCreditoUSD += montoUSD;
+                    } else {
+                        totalCajaUSD += montoUSD;
+                        totalCajaBS += montoBS;
+                    }
+                });
+            });
+
+            renderizarUI();
+        }
+
+        function renderizarUI() {
+            document.getElementById('fecha-actual').innerText = new Date().toLocaleString('es-VE');
+            document.getElementById('cant-ventas').innerText = ventasSinCerrar.length;
+            document.getElementById('total-usd').innerText = `$${totalCajaUSD.toFixed(2)}`;
+            document.getElementById('total-bs').innerText = `Bs ${totalCajaBS.toFixed(2)}`;
+
+            const tbody = document.getElementById('tabla-cuerpo-pagos');
+            tbody.innerHTML = '';
+
+            const llaves = Object.keys(resumenMetodos);
+            if (llaves.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;">No hay ventas pendientes de cierre.</td></tr>`;
+                document.getElementById('btn-ejecutar-cierre').disabled = true;
+                return;
+            }
+
+            document.getElementById('btn-ejecutar-cierre').disabled = false;
+
+            llaves.forEach(metodo => {
+                const item = resumenMetodos[metodo];
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${metodo}</strong></td>
+                    <td class="der">$${item.usd.toFixed(2)}</td>
+                    <td class="der">Bs ${item.bs.toFixed(2)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function procesarCierreCaja() {
+            if (ventasSinCerrar.length === 0) return alert("No hay ventas para cerrar.");
+            if (!confirm("¿Deseas realizar el cierre de caja de este turno?")) return;
+
+            const btn = document.getElementById('btn-ejecutar-cierre');
+            btn.disabled = true;
+            btn.innerText = "Procesando Cierre e Imprimiendo...";
+
+            try {
+                const ids = ventasSinCerrar.map(v => v.id);
+
+                const { error } = await db
+                    .from('ventas')
+                    .update({ cerrado: true })
+                    .in('id', ids);
+
+                if (error) throw error;
+
+                imprimirTicketCierre();
+
+                alert("Cierre de caja completado con éxito.");
+                await cargarVentasTurno();
+
+            } catch (err) {
+                console.error("Error realizando el cierre:", err);
+                alert("Ocurrió un error al procesar el cierre.");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Realizar Cierre de Caja e Imprimir Ticket";
+            }
+        }
+
+        function imprimirTicketCierre() {
+            const area = document.getElementById('area-impresion');
+            const fecha = new Date().toLocaleString('es-VE');
+
+            let filasDesglose = '';
+            Object.keys(resumenMetodos).forEach(metodo => {
+                const m = resumenMetodos[metodo];
+                filasDesglose += `
+                    <tr>
+                        <td>${metodo}</td>
+                        <td class="der">$${m.usd.toFixed(2)}</td>
+                    </tr>
+                `;
+            });
+
+            area.innerHTML = `
+                <div class="ticket-header">
+                    <h2>A&M</h2>
+                    <p><strong>REPORTE DE CIERRE DE CAJA</strong></p>
+                    <p>${fecha}</p>
+                </div>
+                <div class="ticket-linea"></div>
+                <p><strong>Cant. Ventas:</strong> ${ventasSinCerrar.length}</p>
+                <p><strong>Tasa del Día:</strong> ${tasaCambioDia.toFixed(2)} Bs/$</p>
+                <div class="ticket-linea"></div>
+                <p><strong>DESGLOSE POR MÉTODO:</strong></p>
+                <table class="ticket-tabla">
+                    ${filasDesglose}
+                </table>
+                <div class="ticket-linea"></div>
+                <p><strong>TOTAL EN CAJA (USD): $${totalCajaUSD.toFixed(2)}</strong></p>
+                <p><strong>TOTAL EN CAJA (BS): Bs ${totalCajaBS.toFixed(2)}</strong></p>
+                ${totalCreditoUSD > 0 ? `<p style="margin-top:4px; font-size:11px;">* Fiado/Créditos del Turno: $${totalCreditoUSD.toFixed(2)}</p>` : ''}
+                <div class="ticket-linea"></div>
+                <br>
+                <p style="text-align: center;">_______________________</p>
+                <p style="text-align: center; font-size: 11px;">Firma / Firma Cajero</p>
+            `;
+
+            window.print();
+        }
+
+        inicializar();
+    </script>
+</body>
+</html>

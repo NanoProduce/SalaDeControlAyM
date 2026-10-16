@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nueva Venta & Facturación - Sala De Control</title>
+    <!-- SUPABASE CLIENT SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- FAVICON -->
+    <link rel="icon" type="image/png" href="logo.png">
+    <style>
+        :root {
+            --primary: #ff4757;
+            --primary-dark: #e84118;
+            --dark: #2f3542;
+            --light: #f1f2f6;
+            --white: #ffffff;
+            --border: #dfe4ea;
+            --success: #2ed573;
+            --warning: #ffa502;
+            --danger: #ff6b81;
+            --blue: #1e90ff;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--light); min-height: 100vh; display: flex; flex-direction: column; color: var(--dark); padding-bottom: 20px; }
+
+        /* NAVBAR Y MENÚ HAMBURGUESA EN MÓVIL */
+        nav { background-color: var(--dark); padding: 12px 15px; display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 100; }
+        .nav-brand { color: var(--white); font-weight: bold; font-size: 16px; display: flex; align-items: center; gap: 8px; }
+        .menu-toggle { display: none; background: none; border: none; color: var(--white); font-size: 24px; cursor: pointer; outline: none; }
+        
+        .nav-links { display: flex; gap: 8px; }
+        .nav-links a { text-decoration: none; border: 1px solid var(--border); color: var(--white); padding: 8px 12px; border-radius: 6px; font-weight: bold; font-size: 13px; transition: 0.2s; white-space: nowrap; }
+        .nav-links a:hover, .nav-links a.activo { background-color: var(--primary); border-color: var(--primary); }
+
+        @media (max-width: 768px) {
+            .menu-toggle { display: block; }
+            .nav-links { display: none; width: 100%; position: absolute; top: 100%; left: 0; background-color: var(--dark); flex-direction: column; padding: 10px 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+            .nav-links.activo { display: flex; }
+            .nav-links a { width: 100%; text-align: center; padding: 10px; }
+        }
+
+        /* CONTENEDOR PRINCIPAL */
+        .pos-contenedor { display: flex; flex: 1; padding: 15px; gap: 15px; max-width: 1400px; margin: 0 auto; width: 100%; }
+        @media (max-width: 768px) {
+            .pos-contenedor { flex-direction: column; padding: 8px; gap: 12px; }
+        }
+
+        /* CATÁLOGO DE PRODUCTOS (ARRIBA EN MÓVIL) */
+        .catalogo-seccion { flex: 1.2; display: flex; flex-direction: column; gap: 10px; }
+        
+        .header-catalogo { background: var(--white); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+        .header-catalogo h2 { font-size: 15px; color: var(--dark); }
+        .tasa-badge { background: var(--dark); color: white; padding: 4px 8px; border-radius: 20px; font-weight: bold; font-size: 11px; }
+        .tasa-badge span { color: var(--success); }
+
+        .buscador { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; outline: none; background: white; }
+        .buscador:focus { border-color: var(--primary); }
+
+        /* GRID COMPACTO DE ARTÍCULOS EN MÓVIL */
+        .grid-productos { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; }
+        
+        @media (max-width: 768px) {
+            .grid-productos { grid-template-columns: repeat(3, 1fr); gap: 6px; } /* 3 columnas en móviles */
+        }
+        @media (max-width: 400px) {
+            .grid-productos { grid-template-columns: repeat(2, 1fr); gap: 6px; } /* 2 columnas en pantallas muy estrechas */
+        }
+
+        .card-producto { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 8px 6px; text-align: center; cursor: pointer; transition: 0.15s; display: flex; flex-direction: column; justify-content: space-between; user-select: none; }
+        .card-producto:active { transform: scale(0.95); background: #f8f9fa; }
+        .card-producto h3 { font-size: 12px; color: var(--dark); margin-bottom: 4px; line-height: 1.1; word-break: break-word; font-weight: 600; }
+        .card-producto .precio-usd { color: var(--success); font-size: 14px; font-weight: bold; }
+        .card-producto .precio-bs { color: #747d8c; font-size: 10px; margin-top: 1px; }
+        .card-producto .badge-stock { font-size: 9px; background: #f1f2f6; color: #2f3542; padding: 2px 4px; border-radius: 4px; margin-top: 4px; border: 1px solid var(--border); display: inline-block; }
+
+        /* CARRITO Y PAGOS (ABAJO EN MÓVIL) */
+        .carrito-seccion { flex: 1; min-width: 320px; background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+        @media (max-width: 768px) { .carrito-seccion { width: 100%; min-width: unset; } }
+
+        /* BUSCADOR DE CLIENTE */
+        .box-cliente { background: #f8f9fa; border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; position: relative; transition: 0.2s; }
+        .box-cliente.requerido { border-color: var(--danger); background: #fff5f5; }
+        .box-cliente label { display: flex; justify-content: space-between; font-size: 11px; font-weight: bold; color: var(--dark); margin-bottom: 4px; }
+        .badge-req { color: var(--danger); font-size: 10px; font-weight: bold; }
+        .input-cliente { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 5px; font-size: 13px; outline: none; }
+        .input-cliente:focus { border-color: var(--blue); }
+        
+        .dropdown-clientes { position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); z-index: 100; max-height: 150px; overflow-y: auto; }
+        .dropdown-item { padding: 8px 10px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #f1f2f6; }
+        .dropdown-item:hover { background: #f1f2f6; }
+
+        .carrito-seccion h2 { font-size: 15px; color: var(--dark); border-bottom: 2px solid var(--light); padding-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+        
+        .lista-carrito { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+        
+        .item-carrito { display: flex; justify-content: space-between; align-items: center; background: var(--light); padding: 6px 8px; border-radius: 6px; font-size: 12px; }
+        .item-info { display: flex; flex-direction: column; }
+        .item-info .nombre { font-weight: bold; }
+        .item-info .subtotal { font-size: 10px; color: var(--success); font-weight: bold; }
+        
+        .controles-cantidad { display: flex; align-items: center; gap: 4px; }
+        .btn-cant { background: var(--dark); color: white; border: none; width: 24px; height: 24px; border-radius: 4px; font-weight: bold; cursor: pointer; font-size: 13px; }
+        .btn-cant:hover { background: var(--primary); }
+        .cant-val { font-weight: bold; min-width: 16px; text-align: center; }
+
+        /* RESUMEN DE MONTO */
+        .box-totales { background: #f8f9fa; border: 1px dashed var(--border); border-radius: 6px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; }
+        .monto-box { display: flex; flex-direction: column; }
+        .monto-box label { font-size: 10px; color: #747d8c; font-weight: bold; text-transform: uppercase; }
+        .monto-box span { font-size: 17px; font-weight: bold; color: var(--dark); }
+        .monto-box span.bs { color: var(--blue); font-size: 14px; }
+
+        /* MÉTODOS DE PAGO */
+        .seccion-pagos { display: flex; flex-direction: column; gap: 8px; }
+        .seccion-pagos-titulo { font-size: 12px; font-weight: bold; color: var(--dark); display: flex; justify-content: space-between; align-items: center; }
+
+        .filas-pagos { display: flex; flex-direction: column; gap: 6px; max-height: 160px; overflow-y: auto; }
+        
+        .fila-pago-item { display: flex; gap: 4px; align-items: center; background: #fafafa; padding: 5px; border: 1px solid var(--border); border-radius: 6px; }
+        .select-metodo { flex: 1.2; padding: 6px; border: 1px solid var(--border); border-radius: 5px; font-size: 11px; background: white; font-weight: bold; }
+        .input-monto-pago { flex: 1; padding: 6px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; font-weight: bold; text-align: right; width: 70px; }
+        .moneda-tag { font-size: 10px; font-weight: bold; padding: 2px 4px; border-radius: 3px; min-width: 28px; text-align: center; }
+        .moneda-tag.usd { background: #e1f5fe; color: #0288d1; }
+        .moneda-tag.bs { background: #e8f5e9; color: #388e3c; }
+        .btn-del-pago { background: var(--danger); color: white; border: none; width: 26px; height: 26px; border-radius: 4px; cursor: pointer; font-weight: bold; }
+
+        .btn-add-pago { background: var(--blue); color: white; border: none; padding: 7px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; cursor: pointer; align-self: flex-start; }
+
+        /* ESTADO DE SALDO */
+        .balance-info { padding: 8px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; display: flex; justify-content: space-between; }
+        .balance-info.pendiente { background: #fff0f0; color: #d63031; border: 1px solid #ff7675; }
+        .balance-info.completado { background: #e8f8f5; color: #27ae60; border: 1px solid #2ecc71; }
+
+        .btn-procesar { width: 100%; background: var(--success); color: white; border: none; padding: 12px; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 4px; box-shadow: 0 3px 6px rgba(0,0,0,0.1); }
+        .btn-procesar:disabled { background: #a4b0be; cursor: not-allowed; box-shadow: none; }
+
+        /* MODAL REGISTRO RÁPIDO CLIENTE */
+        .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 15px; }
+        .modal-content { background: white; border-radius: 8px; width: 100%; max-width: 380px; padding: 18px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); display: flex; flex-direction: column; gap: 10px; }
+        .modal-content h3 { font-size: 15px; color: var(--dark); border-bottom: 2px solid var(--light); padding-bottom: 6px; }
+        .modal-content p { font-size: 11px; color: #57606f; }
+        .modal-field { display: flex; flex-direction: column; gap: 3px; }
+        .modal-field label { font-size: 11px; font-weight: bold; color: var(--dark); }
+        .modal-field input { padding: 8px; border: 1px solid var(--border); border-radius: 5px; font-size: 12px; outline: none; }
+        .modal-acciones { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+        .btn-modal-cancel { background: #a4b0be; color: white; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 11px; }
+        .btn-modal-save { background: var(--success); color: white; border: none; padding: 8px 14px; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 11px; }
+
+        .vacio { text-align: center; color: #747d8c; padding: 15px; font-size: 12px; }
+
+        /* ESTILOS PARA LA FACTURA TÉRMICA EN IMPRESIÓN */
+        .factura-print { display: none; }
+
+        @media print {
+            body * { visibility: hidden !important; }
+            #facturaPrint, #facturaPrint * { visibility: visible !important; }
+            #facturaPrint {
+                display: block !important;
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 58mm; /* Ancho para impresoras térmicas de 58mm */
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 10px;
+                color: #000;
+                background: #fff;
+                padding: 2mm;
+            }
+            .factura-header { text-align: center; margin-bottom: 5px; }
+            .factura-header h2 { font-size: 13px; margin-bottom: 2px; }
+            .factura-header p { margin: 1px 0; }
+            .factura-tabla { width: 100%; border-collapse: collapse; margin-top: 4px; }
+            .factura-tabla th, .factura-tabla td { text-align: left; padding: 2px 0; font-size: 9px; }
+            .factura-tabla th.num, .factura-tabla td.num { text-align: right; }
+            .factura-totales { margin-top: 5px; border-top: 1px dashed #000; padding-top: 4px; text-align: right; }
+            .factura-totales p { font-size: 10px; font-weight: bold; margin: 2px 0; }
+            .factura-footer { text-align: center; margin-top: 8px; font-style: italic; font-size: 9px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- NAVBAR RESPONSIVO -->
+    <nav>
+        <div class="nav-brand">
+            Sala De Control
+        </div>
+        <button class="menu-toggle" onclick="toggleNavMenu()">☰</button>
+        <div class="nav-links" id="navLinks">
+            <a href="index.html" class="activo">Nueva Venta</a>
+            <a href="inventario.html">Inventario</a>
+            <a href="tasa.html">Tasa del Día</a>
+            <a href="ventas.html">Ventas</a>
+            <a href="cierre.html">Cierre de Caja</a>
+        </div>
+    </nav>
+
+    <!-- POS CONTENEDOR -->
+    <div class="pos-contenedor">
+
+        <!-- CATÁLOGO DE PRODUCTOS (ARRIBA) -->
+        <div class="catalogo-seccion">
+            <div class="header-catalogo">
+                <h2>🍔 Menú de Productos</h2>
+                <div class="tasa-badge">Tasa: $<span id="tasa-valor">0.00</span> Bs</div>
+            </div>
+
+            <input type="text" id="input-buscar" class="buscador" placeholder="🔍 Buscar producto..." oninput="filtrarProductos()">
+
+            <div id="grid-productos" class="grid-productos">
+                <div class="vacio">Cargando productos...</div>
+            </div>
+        </div>
+
+        <!-- CARRITO Y PAGOS (ABAJO EN MÓVIL) -->
+        <div class="carrito-seccion">
+
+            <!-- BUSCADOR / SELECCIÓN DE CLIENTE -->
+            <div class="box-cliente" id="box-cliente">
+                <label for="input-cliente">
+                    <span>👤 Cliente / Cédula</span>
+                    <span id="badge-req-credito" class="badge-req" style="display:none;">⚠️ Requerido para Crédito</span>
+                </label>
+                <div style="position: relative;">
+                    <input type="text" id="input-cliente" class="input-cliente" placeholder="Buscar o ingresar Cédula..." oninput="buscarCliente(this.value)" autocomplete="off">
+                    <div id="dropdown-clientes" class="dropdown-clientes" style="display:none;"></div>
+                </div>
+            </div>
+
+            <h2>🛒 Carrito <button onclick="vaciarCarrito()" style="background:none; border:none; color:var(--danger); font-size:11px; cursor:pointer; text-decoration:underline;">Vaciar</button></h2>
+            
+            <div id="lista-carrito" class="lista-carrito">
+                <div class="vacio">El carrito está vacío</div>
+            </div>
+
+            <!-- TOTALES DE LA VENTA -->
+            <div class="box-totales">
+                <div class="monto-box">
+                    <label>Total USD</label>
+                    <span id="total-usd">$0.00</span>
+                </div>
+                <div class="monto-box" style="text-align: right;">
+                    <label>Total Bs</label>
+                    <span id="total-bs" class="bs">Bs 0.00</span>
+                </div>
+            </div>
+
+            <!-- DESGLOSE DE PAGOS MULTIPLES -->
+            <div class="seccion-pagos">
+                <div class="seccion-pagos-titulo">
+                    <span>💵 Desglose de Pago</span>
+                </div>
+
+                <div id="filas-pagos" class="filas-pagos">
+                    <!-- Filas de pago dinámicas -->
+                </div>
+
+                <button type="button" class="btn-add-pago" id="btn-add-pago" onclick="agregarFilaPago()" disabled>
+                    ➕ Añadir Pago
+                </button>
+            </div>
+
+            <!-- INDICADOR DE RESTANTE O CAMBIO -->
+            <div id="balance-box" class="balance-info pendiente">
+                <span id="balance-label">Restante por pagar:</span>
+                <span id="balance-val">$0.00 / Bs 0.00</span>
+            </div>
+
+            <button id="btn-finalizar" class="btn-procesar" onclick="procesarVenta()" disabled>🖨️ Procesar e Imprimir Venta</button>
+        </div>
+
+    </div>
+
+    <!-- MODAL REGISTRO RÁPIDO CLIENTE (CRÉDITO) -->
+    <div id="modal-cliente" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <h3>📝 Registro Rápido de Cliente</h3>
+            <p>La cédula no está registrada. Ingresa el nombre para autorizar el crédito:</p>
+            
+            <div class="modal-field">
+                <label>Cédula *</label>
+                <input type="text" id="reg-cedula" placeholder="Ej: V-14802590">
+            </div>
+
+            <div class="modal-field">
+                <label>Nombre Completo *</label>
+                <input type="text" id="reg-nombre" placeholder="Ej: Manuel Colina" autofocus>
+            </div>
+
+            <div class="modal-field">
+                <label>Teléfono (Opcional)</label>
+                <input type="text" id="reg-telefono" placeholder="Ej: 04124271329">
+            </div>
+
+            <div class="modal-acciones">
+                <button type="button" class="btn-modal-cancel" onclick="cerrarModalCliente()">Cancelar</button>
+                <button type="button" class="btn-modal-save" onclick="guardarYProcesarCliente()">Guardar y Autorizar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ESTRUCTURA OCULTA DE LA FACTURA PARA IMPRESIÓN -->
+    <div id="facturaPrint" class="factura-print">
+        <div class="factura-header">
+            <h2>FAST FOOD POS</h2>
+            <p>RIF: J-12345678-0</p>
+            <p>--------------------------------</p>
+            <p id="facturaFecha"></p>
+            <p id="facturaCliente"></p>
+            <p id="facturaMetodoPago"></p>
+            <p>--------------------------------</p>
+        </div>
+
+        <table class="factura-tabla">
+            <thead>
+                <tr>
+                    <th>Cant</th>
+                    <th>Prod</th>
+                    <th class="num">P.U</th>
+                    <th class="num">Tot</th>
+                </tr>
+            </thead>
+            <tbody id="facturaItems">
+                <!-- Se llena con JS -->
+            </tbody>
+        </table>
+
+        <div class="factura-totales">
+            <p>TOTAL USD: <span id="facturaTotalUsd">$0.00</span></p>
+            <p>TOTAL BS: <span id="facturaTotalBs">Bs 0.00</span></p>
+        </div>
+
+        <div class="factura-footer">
+            <p>--------------------------------</p>
+            <p>¡Gracias por su compra!</p>
+        </div>
+    </div>
+
+    <!-- SCRIPT POS CON SUPABASE, FACTURA Y MÓVIL -->
+    <script>
+        const SUPABASE_URL = 'https://zoamybqkzcguvynxrzbx.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvYW15YnFremNndXZ5bnhyemJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4OTEyMzYsImV4cCI6MjEwNDQ2NzIzNn0.nuPzT3cLUnt0VIlOa4TbZthdkOYQCK6S5vpGW8A2U5E';
+        const METODOS = [
+            { id: 'Efectivo USD', nombre: '💵 Efectivo USD', moneda: 'USD' },
+            { id: 'Zinli', nombre: '💳 Zinli', moneda: 'USD' },
+            { id: 'Credito', nombre: '📝 Crédito', moneda: 'USD' },
+            { id: 'Punto de Venta', nombre: '💳 Punto de Venta', moneda: 'BS' },
+            { id: 'Efectivo Bs', nombre: '💵 Efectivo Bs', moneda: 'BS' },
+            { id: 'PagoMovil/transferencia', nombre: '📱 PagoMovil / Transferencia', moneda: 'BS' },
+            { id: 'Bio Pago', nombre: '👆 Bio Pago', moneda: 'BS' }
+        ];
+
+        let db = null;
+        let tasaCambio = 1;
+        let listaProductos = [];
+        let carrito = [];
+        let pagos = [];
+        let clienteSeleccionado = { cedula: '', nombre: '', verificado: false };
+
+        window.addEventListener('DOMContentLoaded', () => {
+            if (window.supabase) {
+                db = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                inicializarPOS();
+            } else {
+                alert("Error: No se pudo cargar el SDK de Supabase.");
+            }
+        });
+
+        function toggleNavMenu() {
+            document.getElementById('navLinks').classList.toggle('activo');
+        }
+
+        document.addEventListener('click', (e) => {
+            const box = document.getElementById('box-cliente');
+            if (box && !box.contains(e.target)) {
+                document.getElementById('dropdown-clientes').style.display = 'none';
+            }
+        });
+
+        async function inicializarPOS() {
+            await cargarTasa();
+            await cargarProductos();
+        }
+
+        async function cargarTasa() {
+            try {
+                const { data } = await db.from('tasa_dia').select('tasa').order('id', { ascending: false }).limit(1);
+                if (data && data.length > 0) {
+                    tasaCambio = parseFloat(data[0].tasa) || 1;
+                }
+                document.getElementById('tasa-valor').innerText = tasaCambio.toFixed(2);
+            } catch (e) {
+                console.error("Error al obtener la tasa:", e);
+            }
+        }
+
+        async function cargarProductos() {
+            try {
+                const { data, error } = await db
+                    .from('inventario')
+                    .select('*, insumos(nombre, stock)')
+                    .order('nombre', { ascending: true });
+
+                if (error) throw error;
+                listaProductos = data || [];
+                renderizarProductos(listaProductos);
+            } catch (err) {
+                console.error("Error cargando productos:", err);
+                document.getElementById('grid-productos').innerHTML = `<div class="vacio">Error al cargar productos.</div>`;
+            }
+        }
+
+        function renderizarProductos(productos) {
+            const grid = document.getElementById('grid-productos');
+            grid.innerHTML = '';
+
+            if (productos.length === 0) {
+                grid.innerHTML = `<div class="vacio">No hay productos disponibles.</div>`;
+                return;
+            }
+
+            productos.forEach(prod => {
+                const precioUsd = parseFloat(prod.precio_usd) || 0;
+                const precioBs = (precioUsd * tasaCambio).toFixed(2);
+                
+                const nombreInsumo = prod.insumos ? prod.insumos.nombre : null;
+                const stockInsumo = prod.insumos ? prod.insumos.stock : null;
+                const badgeInsumo = nombreInsumo ? `<div class="badge-stock">🥖 ${nombreInsumo} (${stockInsumo})</div>` : '';
+
+                const card = document.createElement('div');
+                card.className = 'card-producto';
+                card.onclick = () => agregarAlCarrito(prod);
+                card.innerHTML = `
+                    <h3>${prod.nombre}</h3>
+                    <div>
+                        <div class="precio-usd">$${precioUsd.toFixed(2)}</div>
+                        <div class="precio-bs">Bs ${precioBs}</div>
+                    </div>
+                    ${badgeInsumo}
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function filtrarProductos() {
+            const texto = document.getElementById('input-buscar').value.toLowerCase().trim();
+            const filtrados = listaProductos.filter(p => p.nombre.toLowerCase().includes(texto));
+            renderizarProductos(filtrados);
+        }
+
+        /* --- CLIENTES --- */
+
+        async function buscarCliente(texto) {
+            const dropdown = document.getElementById('dropdown-clientes');
+            clienteSeleccionado = { cedula: texto.trim(), nombre: '', verificado: false };
+
+            if (!texto || texto.trim().length < 2) {
+                dropdown.style.display = 'none';
+                return;
+            }
+
+            try {
+                const { data } = await db.from('clientes')
+                    .select('*')
+                    .or(`cedula.ilike.%${texto}%,nombre.ilike.%${texto}%`)
+                    .limit(5);
+
+                if (data && data.length > 0) {
+                    dropdown.innerHTML = data.map(c => `
+                        <div class="dropdown-item" onclick="seleccionarCliente('${c.cedula}', '${c.nombre}')">
+                            <strong>${c.cedula}</strong> - ${c.nombre}
+                        </div>
+                    `).join('');
+                    dropdown.style.display = 'block';
+                } else {
+                    dropdown.innerHTML = `<div class="dropdown-item" style="color:#747d8c;">Cédula no registrada: "${texto}"</div>`;
+                    dropdown.style.display = 'block';
+                }
+            } catch (err) {
+                console.error("Error buscando cliente:", err);
+            }
+        }
+
+        function seleccionarCliente(cedula, nombre) {
+            clienteSeleccionado = { cedula, nombre, verificado: true };
+            document.getElementById('input-cliente').value = `${cedula} - ${nombre}`;
+            document.getElementById('dropdown-clientes').style.display = 'none';
+        }
+
+        /* --- MODAL CLIENTE --- */
+
+        function abrirModalCliente(cedulaInicial = '') {
+            document.getElementById('reg-cedula').value = cedulaInicial;
+            document.getElementById('reg-nombre').value = '';
+            document.getElementById('reg-telefono').value = '';
+            document.getElementById('modal-cliente').style.display = 'flex';
+            document.getElementById('reg-nombre').focus();
+        }
+
+        function cerrarModalCliente() {
+            document.getElementById('modal-cliente').style.display = 'none';
+        }
+
+        async function guardarYProcesarCliente() {
+            const cedula = document.getElementById('reg-cedula').value.trim();
+            const nombre = document.getElementById('reg-nombre').value.trim();
+            const telefono = document.getElementById('reg-telefono').value.trim();
+
+            if (!cedula || !nombre) {
+                alert("⚠️ Por favor ingresa la Cédula y el Nombre completo.");
+                return;
+            }
+
+            try {
+                const { error } = await db.from('clientes').upsert([{
+                    cedula: cedula,
+                    nombre: nombre,
+                    telefono: telefono || null
+                }], { onConflict: 'cedula' });
+
+                if (error) throw error;
+
+                seleccionarCliente(cedula, nombre);
+                cerrarModalCliente();
+
+                procesarVenta();
+
+            } catch (err) {
+                console.error("Error al registrar cliente:", err);
+                alert("Error al guardar cliente: " + err.message);
+            }
+        }
+
+        /* --- CARRITO --- */
+
+        function agregarAlCarrito(prod) {
+            const existe = carrito.find(item => item.id === prod.id);
+
+            if (existe) {
+                existe.cantidad += 1;
+            } else {
+                carrito.push({
+                    id: prod.id,
+                    nombre: prod.nombre,
+                    precio_usd: parseFloat(prod.precio_usd),
+                    cantidad: 1,
+                    insumo_id: prod.insumo_id,
+                    cantidad_insumo: parseFloat(prod.cantidad_insumo) || 1
+                });
+            }
+
+            if (pagos.length === 0) {
+                agregarFilaPago('Efectivo USD');
+            } else {
+                recalcularSaldos();
+            }
+
+            renderizarCarrito();
+        }
+
+        function renderizarCarrito() {
+            const contenedor = document.getElementById('lista-carrito');
+            contenedor.innerHTML = '';
+
+            if (carrito.length === 0) {
+                contenedor.innerHTML = `<div class="vacio">El carrito está vacío</div>`;
+                document.getElementById('total-usd').innerText = `$0.00`;
+                document.getElementById('total-bs').innerText = `Bs 0.00`;
+                document.getElementById('btn-add-pago').disabled = true;
+                pagos = [];
+                renderizarPagos();
+                recalcularSaldos();
+                return;
+            }
+
+            let totalUsd = 0;
+
+            carrito.forEach((item, index) => {
+                const subtotal = item.precio_usd * item.cantidad;
+                totalUsd += subtotal;
+
+                const div = document.createElement('div');
+                div.className = 'item-carrito';
+                div.innerHTML = `
+                    <div class="item-info">
+                        <span class="nombre">${item.nombre}</span>
+                        <span class="subtotal">$${subtotal.toFixed(2)} (Bs ${(subtotal * tasaCambio).toFixed(2)})</span>
+                    </div>
+                    <div class="controles-cantidad">
+                        <button class="btn-cant" onclick="cambiarCantidad(${index}, -1)">-</button>
+                        <span class="cant-val">${item.cantidad}</span>
+                        <button class="btn-cant" onclick="cambiarCantidad(${index}, 1)">+</button>
+                    </div>
+                `;
+                contenedor.appendChild(div);
+            });
+
+            const totalBs = totalUsd * tasaCambio;
+            document.getElementById('total-usd').innerText = `$${totalUsd.toFixed(2)}`;
+            document.getElementById('total-bs').innerText = `Bs ${totalBs.toFixed(2)}`;
+            document.getElementById('btn-add-pago').disabled = false;
+
+            recalcularSaldos();
+        }
+
+        function cambiarCantidad(index, cambio) {
+            carrito[index].cantidad += cambio;
+            if (carrito[index].cantidad <= 0) {
+                carrito.splice(index, 1);
+            }
+            renderizarCarrito();
+        }
+
+        function vaciarCarrito() {
+            carrito = [];
+            pagos = [];
+            renderizarCarrito();
+        }
+
+        /* --- PAGOS --- */
+
+        function obtenerTotalVentaUSD() {
+            return carrito.reduce((acc, item) => acc + (item.precio_usd * item.cantidad), 0);
+        }
+
+        function agregarFilaPago(metodoDefecto = 'Punto de Venta') {
+            const totalVentaUsd = obtenerTotalVentaUSD();
+            
+            let pagadoActualUsd = 0;
+            pagos.forEach(p => {
+                pagadoActualUsd += (p.moneda === 'USD') ? p.monto : (p.monto / tasaCambio);
+            });
+
+            const faltaUsd = Math.max(0, totalVentaUsd - pagadoActualUsd);
+            const configMetodo = METODOS.find(m => m.id === metodoDefecto) || METODOS[0];
+            
+            const montoInicial = (configMetodo.moneda === 'BS') 
+                ? parseFloat((faltaUsd * tasaCambio).toFixed(2))
+                : parseFloat(faltaUsd.toFixed(2));
+
+            pagos.push({
+                id: Date.now() + Math.random(),
+                metodo: configMetodo.id,
+                monto: montoInicial,
+                moneda: configMetodo.moneda
+            });
+
+            renderizarPagos();
+            recalcularSaldos();
+        }
+
+        function eliminarFilaPago(id) {
+            pagos = pagos.filter(p => p.id !== id);
+            renderizarPagos();
+            recalcularSaldos();
+        }
+
+        function actualizarMetodoPago(id, nuevoMetodoId) {
+            const pago = pagos.find(p => p.id === id);
+            if (!pago) return;
+
+            const configMetodo = METODOS.find(m => m.id === nuevoMetodoId);
+            const monedaAnterior = pago.moneda;
+            pago.metodo = configMetodo.id;
+            pago.moneda = configMetodo.moneda;
+
+            if (monedaAnterior !== configMetodo.moneda) {
+                if (configMetodo.moneda === 'BS') {
+                    pago.monto = parseFloat((pago.monto * tasaCambio).toFixed(2));
+                } else {
+                    pago.monto = parseFloat((pago.monto / tasaCambio).toFixed(2));
+                }
+            }
+
+            renderizarPagos();
+            recalcularSaldos();
+        }
+
+        function actualizarMontoPago(id, valorTexto) {
+            const pago = pagos.find(p => p.id === id);
+            if (!pago) return;
+
+            pago.monto = parseFloat(valorTexto) || 0;
+            recalcularSaldos();
+        }
+
+        function renderizarPagos() {
+            const contenedor = document.getElementById('filas-pagos');
+            contenedor.innerHTML = '';
+
+            if (pagos.length === 0) {
+                contenedor.innerHTML = `<div class="vacio" style="padding:8px;">Haz clic en "➕ Añadir Pago" para registrar un pago.</div>`;
+                return;
+            }
+
+            pagos.forEach((pago) => {
+                const div = document.createElement('div');
+                div.className = 'fila-pago-item';
+
+                let opciones = METODOS.map(m => `
+                    <option value="${m.id}" ${m.id === pago.metodo ? 'selected' : ''}>
+                        ${m.nombre}
+                    </option>
+                `).join('');
+
+                div.innerHTML = `
+                    <select class="select-metodo" onchange="actualizarMetodoPago(${pago.id}, this.value)">
+                        ${opciones}
+                    </select>
+
+                    <span class="moneda-tag ${pago.moneda.toLowerCase()}">${pago.moneda === 'USD' ? '$' : 'Bs'}</span>
+
+                    <input type="number" step="0.01" min="0" class="input-monto-pago" 
+                           value="${pago.monto}" 
+                           oninput="actualizarMontoPago(${pago.id}, this.value)">
+
+                    <button type="button" class="btn-del-pago" onclick="eliminarFilaPago(${pago.id})">✕</button>
+                `;
+                contenedor.appendChild(div);
+            });
+        }
+
+        function recalcularSaldos() {
+            const totalVentaUsd = obtenerTotalVentaUSD();
+            const totalVentaBs = totalVentaUsd * tasaCambio;
+
+            let totalAbonadoUsd = 0;
+            pagos.forEach(p => {
+                if (p.moneda === 'USD') {
+                    totalAbonadoUsd += p.monto;
+                } else {
+                    totalAbonadoUsd += (p.monto / tasaCambio);
+                }
+            });
+
+            const diferenciaUsd = totalAbonadoUsd - totalVentaUsd;
+            const diferenciaBs = diferenciaUsd * tasaCambio;
+
+            const box = document.getElementById('balance-box');
+            const label = document.getElementById('balance-label');
+            const val = document.getElementById('balance-val');
+            const btnFinalizar = document.getElementById('btn-finalizar');
+
+            const boxCliente = document.getElementById('box-cliente');
+            const badgeReqCredito = document.getElementById('badge-req-credito');
+
+            const tieneCredito = pagos.some(p => p.metodo === 'Credito');
+
+            if (tieneCredito) {
+                boxCliente.classList.add('requerido');
+                badgeReqCredito.style.display = 'inline';
+            } else {
+                boxCliente.classList.remove('requerido');
+                badgeReqCredito.style.display = 'none';
+            }
+
+            if (carrito.length === 0) {
+                box.className = 'balance-info pendiente';
+                label.innerText = 'Restante por pagar:';
+                val.innerText = '$0.00 / Bs 0.00';
+                btnFinalizar.disabled = true;
+                return;
+            }
+
+            if (diferenciaUsd >= -0.01) {
+                box.className = 'balance-info completado';
+                label.innerText = diferenciaUsd > 0.009 ? 'Cambio / Vuelto:' : 'Pago Completo:';
+                val.innerText = `$${Math.abs(diferenciaUsd).toFixed(2)} / Bs ${Math.abs(diferenciaBs).toFixed(2)}`;
+                btnFinalizar.disabled = false;
+            } else if (tieneCredito) {
+                box.className = 'balance-info completado';
+                label.innerText = 'Restante a Crédito:';
+                val.innerText = `$${Math.abs(diferenciaUsd).toFixed(2)} / Bs ${Math.abs(diferenciaBs).toFixed(2)}`;
+                btnFinalizar.disabled = false;
+            } else {
+                box.className = 'balance-info pendiente';
+                label.innerText = 'Falta por pagar:';
+                val.innerText = `$${Math.abs(diferenciaUsd).toFixed(2)} / Bs ${Math.abs(diferenciaBs).toFixed(2)}`;
+                btnFinalizar.disabled = true;
+            }
+        }
+
+        /* --- PROCESAR VENTA E IMPRIMIR --- */
+
+        async function procesarVenta() {
+            if (carrito.length === 0 || pagos.length === 0) return;
+
+            const tieneCredito = pagos.some(p => p.metodo === 'Credito');
+            const clienteInputVal = document.getElementById('input-cliente').value.trim();
+
+            if (tieneCredito) {
+                if (!clienteInputVal) {
+                    alert("⚠️ Para procesar un crédito debes ingresar la Cédula del Cliente.");
+                    document.getElementById('input-cliente').focus();
+                    return;
+                }
+
+                if (!clienteSeleccionado.verificado) {
+                    const cedulaBuscada = clienteSeleccionado.cedula || clienteInputVal;
+                    
+                    const { data: clienteExistente } = await db.from('clientes')
+                        .select('*')
+                        .eq('cedula', cedulaBuscada)
+                        .maybeSingle();
+
+                    if (clienteExistente) {
+                        clienteSeleccionado = { 
+                            cedula: clienteExistente.cedula, 
+                            nombre: clienteExistente.nombre, 
+                            verificado: true 
+                        };
+                    } else {
+                        abrirModalCliente(cedulaBuscada);
+                        return;
+                    }
+                }
+            }
+
+            const btn = document.getElementById('btn-finalizar');
+            btn.disabled = true;
+            btn.innerText = "Procesando...";
+
+            const totalUsd = obtenerTotalVentaUSD();
+            const totalBs = totalUsd * tasaCambio;
+
+            const clienteCedula = clienteSeleccionado.cedula || clienteInputVal || 'CLIENTE GENERAL';
+            const clienteNombre = clienteSeleccionado.nombre || clienteInputVal || 'CLIENTE GENERAL';
+
+            const resumenPagos = pagos.map(p => {
+                const montoTxt = p.moneda === 'USD' ? `$${p.monto.toFixed(2)}` : `Bs ${p.monto.toFixed(2)}`;
+                return `${p.metodo}: ${montoTxt}`;
+            }).join(' + ');
+
+            try {
+                // A. Registrar la venta en Supabase
+                const { data: ventaData, error: errorVenta } = await db.from('ventas').insert([{
+                    total_usd: totalUsd,
+                    total_bs: totalBs,
+                    tasa_usd: tasaCambio,
+                    metodo_pago: resumenPagos,
+                    cliente_cedula: clienteCedula,
+                    cliente_nombre: clienteNombre,
+                    fecha: new Date().toISOString()
+                }]).select();
+
+                if (errorVenta) throw errorVenta;
+
+                const ventaId = ventaData[0]?.id;
+
+                // B. Registrar Crédito si aplica
+                const pagoCredito = pagos.find(p => p.metodo === 'Credito');
+                if (pagoCredito && pagoCredito.monto > 0) {
+                    const montoCreditoUsd = pagoCredito.monto;
+                    const montoCreditoBs = montoCreditoUsd * tasaCambio;
+
+                    await db.from('creditos').insert([{
+                        venta_id: ventaId,
+                        cliente_cedula: clienteCedula,
+                        cliente_nombre: clienteNombre,
+                        monto_usd: montoCreditoUsd,
+                        monto_bs: montoCreditoBs,
+                        saldo_pendiente_usd: montoCreditoUsd,
+                        estado: 'pendiente',
+                        fecha: new Date().toISOString()
+                    }]);
+                }
+
+                // C. Descontar Insumos
+                for (const item of carrito) {
+                    if (item.insumo_id) {
+                        const totalADescuentar = item.cantidad * item.cantidad_insumo;
+                        await db.rpc('descontar_insumo', {
+                            p_insumo_id: item.insumo_id,
+                            p_cantidad: totalADescuentar
+                        });
+                    }
+                }
+
+                // D. Generar e Imprimir Factura
+                imprimirFactura(clienteNombre, clienteCedula, resumenPagos, totalUsd, totalBs);
+
+                // Limpiar sistema
+                document.getElementById('input-cliente').value = '';
+                clienteSeleccionado = { cedula: '', nombre: '', verificado: false };
+                vaciarCarrito();
+                await cargarProductos();
+
+            } catch (err) {
+                console.error("Error al procesar la venta:", err);
+                alert("Error al procesar la venta: " + (err.message || JSON.stringify(err)));
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "🖨️ Procesar e Imprimir Venta";
+            }
+        }
+
+        /* --- GENERACIÓN E IMPRESIÓN DE TICKET --- */
+
+        function imprimirFactura(clienteNombre, clienteCedula, resumenPagos, totalUsd, totalBs) {
+            const fechaTxt = new Date().toLocaleString('es-VE');
+
+            document.getElementById('facturaFecha').innerText = `Fecha: ${fechaTxt}`;
+            document.getElementById('facturaCliente').innerText = `Cliente: ${clienteNombre} (${clienteCedula})`;
+            document.getElementById('facturaMetodoPago').innerText = `Pago: ${resumenPagos}`;
+            document.getElementById('facturaTotalUsd').innerText = `$${totalUsd.toFixed(2)}`;
+            document.getElementById('facturaTotalBs').innerText = `Bs ${totalBs.toFixed(2)}`;
+
+            const contenedorItems = document.getElementById('facturaItems');
+            contenedorItems.innerHTML = '';
+
+            carrito.forEach(item => {
+                const subtotalUsd = item.precio_usd * item.cantidad;
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${item.cantidad}</td>
+                    <td>${item.nombre.substring(0, 12)}</td>
+                    <td class="num">$${item.precio_usd.toFixed(2)}</td>
+                    <td class="num">$${subtotalUsd.toFixed(2)}</td>
+                `;
+                contenedorItems.appendChild(tr);
+            });
+
+            // Disparar orden de impresión nativa
+            setTimeout(() => {
+                window.print();
+            }, 300);
+        }
+    </script>
+</body>
+</html>

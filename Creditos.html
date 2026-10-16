@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Créditos - Fast Food</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- FAVICON -->
+    <link rel="icon" type="image/png" href="logo.png">
+    <style>
+        :root {
+            --primary: #ff4757;
+            --dark: #2f3542;
+            --light: #f1f2f6;
+            --white: #ffffff;
+            --border: #dfe4ea;
+            --success: #2ed573;
+            --warning: #ffa502;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--light); height: 100vh; display: flex; flex-direction: column; }
+
+        /* NAVEGACIÓN (Sin la opción Ventas) */
+        nav { background-color: var(--dark); padding: 10px 20px; display: flex; gap: 10px; overflow-x: auto; }
+        nav a { text-decoration: none; border: 1px solid var(--border); color: var(--white); padding: 10px 15px; border-radius: 5px; font-weight: bold; font-size: 14px; transition: 0.3s; white-space: nowrap; }
+        nav a:hover, nav a.activo { background-color: var(--primary); border-color: var(--primary); }
+
+        /* CONTENEDOR */
+        .contenedor { display: flex; flex: 1; overflow: hidden; padding: 15px; gap: 15px; }
+
+        /* LISTA DE DEUDORES (IZQUIERDA) */
+        .panel-deudores { flex: 1; background: var(--white); border-radius: 8px; border: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; gap: 12px; min-width: 320px; }
+        .caja-tasa { background: #eccc68; padding: 10px; border-radius: 6px; font-weight: bold; font-size: 14px; color: var(--dark); display: flex; justify-content: space-between; }
+        .buscador { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; }
+        .lista-clientes { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+
+        .tarjeta-deudor { background: var(--light); padding: 12px; border-radius: 6px; border-left: 5px solid var(--warning); cursor: pointer; transition: 0.2s; }
+        .tarjeta-deudor:hover, .tarjeta-deudor.seleccionado { border-left-color: var(--primary); background: #eef1f5; transform: translateX(2px); }
+        .tarjeta-deudor h4 { font-size: 15px; color: var(--dark); }
+        .tarjeta-deudor p { font-size: 12px; color: #747d8c; margin-top: 2px; }
+        .monto-deuda { font-size: 15px; font-weight: bold; color: var(--primary); margin-top: 5px; }
+
+        /* DETALLE DEL CRÉDITO (DERECHA) */
+        .panel-detalle { flex: 2; background: var(--white); border-radius: 8px; border: 1px solid var(--border); padding: 15px; display: flex; flex-direction: column; overflow-y: auto; }
+        .header-detalle { border-bottom: 2px solid var(--light); padding-bottom: 10px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
+        
+        .ticket-credito { background: #f8f9fa; border: 1px solid var(--border); border-radius: 6px; padding: 12px; margin-bottom: 12px; }
+        .ticket-header { display: flex; justify-content: space-between; border-bottom: 1px dashed var(--border); padding-bottom: 6px; margin-bottom: 8px; font-size: 13px; color: var(--dark); }
+        .tabla-productos { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 8px; }
+        .tabla-productos td { padding: 4px 0; }
+        .tabla-productos td.der { text-align: right; }
+
+        .totales-ticket { background: var(--dark); color: white; padding: 10px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; }
+        .btn-pagar { background: var(--success); color: white; border: none; padding: 8px 14px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn-pagar:hover { opacity: 0.9; }
+
+        .vacio { text-align: center; color: #747d8c; margin-top: 40px; font-size: 14px; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <a href="index.html">Nueva Venta</a>
+        <a href="inventario.html">Inventario</a>
+        <a href="tasa.html">Tasa del Día</a>
+        <a href="creditos.html" class="activo">Créditos</a>
+        <a href="cierre.html">Cierre de Caja</a>
+    </nav>
+
+    <div class="contenedor">
+        <!-- BUSCADOR Y LISTA DE CLIENTES CON DEUDA -->
+        <div class="panel-deudores">
+            <div class="caja-tasa">
+                <span>Tasa actual:</span>
+                <strong id="tasa-actual">Cargando...</strong>
+            </div>
+
+            <input type="text" id="input-buscar-deudor" class="buscador" placeholder="Buscar cliente por nombre o cédula...">
+
+            <div class="lista-clientes" id="lista-clientes"></div>
+        </div>
+
+        <!-- DETALLE DE LOS CRÉDITOS DEL CLIENTE SELECCIONADO -->
+        <div class="panel-detalle" id="panel-detalle">
+            <div class="vacio">Selecciona un cliente de la lista para ver el desglose de sus créditos.</div>
+        </div>
+    </div>
+
+    <script>
+        const { createClient } = window.supabase;
+        const SUPABASE_URL = 'https://zoamybqkzcguvynxrzbx.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpvYW15YnFremNndXZ5bnhyemJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg4OTEyMzYsImV4cCI6MjEwNDQ2NzIzNn0.nuPzT3cLUnt0VIlOa4TbZthdkOYQCK6S5vpGW8A2U5E';
+                const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        let tasaCambioDia = 0;
+        let deudores = [];
+        let clienteSeleccionadoId = null;
+
+        const tasaActualDOM = document.getElementById('tasa-actual');
+        const listaClientesDOM = document.getElementById('lista-clientes');
+        const inputBuscar = document.getElementById('input-buscar-deudor');
+        const panelDetalleDOM = document.getElementById('panel-detalle');
+
+        async function inicializar() {
+            await obtenerTasaDelDia();
+            await cargarDeudores();
+        }
+
+        async function obtenerTasaDelDia() {
+            try {
+                const { data, error } = await db.from('tasa_dia').select('tasa').order('id', { ascending: false }).limit(1);
+                if (error) throw error;
+                if (data && data.length > 0) {
+                    tasaCambioDia = parseFloat(data[0].tasa);
+                    tasaActualDOM.innerText = `${tasaCambioDia.toFixed(2)} Bs/$`;
+                }
+            } catch (err) { console.error("Error obteniendo tasa:", err); }
+        }
+
+        async function cargarDeudores() {
+            try {
+                // Consulta créditos pendientes trayendo la información del cliente registrado
+                const { data, error } = await db
+                    .from('creditos')
+                    .select('id, cliente_id, monto_usd, clientes(id, nombre, cedula)')
+                    .eq('estado', 'pendiente');
+
+                if (error) throw error;
+
+                // Agrupar deuda total por cliente
+                const mapaDeudores = {};
+                (data || []).forEach(item => {
+                    if (!item.clientes) return;
+                    const cId = item.clientes.id;
+                    if (!mapaDeudores[cId]) {
+                        mapaDeudores[cId] = {
+                            id: cId,
+                            nombre: item.clientes.nombre,
+                            cedula: item.clientes.cedula,
+                            totalUSD: 0
+                        };
+                    }
+                    mapaDeudores[cId].totalUSD += parseFloat(item.monto_usd);
+                });
+
+                deudores = Object.values(mapaDeudores);
+                renderizarListaDeudores();
+            } catch (err) {
+                console.error("Error al cargar deudores:", err);
+            }
+        }
+
+        function renderizarListaDeudores(filtro = "") {
+            listaClientesDOM.innerHTML = "";
+            const filtrados = deudores.filter(d => 
+                d.nombre.toLowerCase().includes(filtro.toLowerCase()) || 
+                d.cedula.toLowerCase().includes(filtro.toLowerCase())
+            );
+
+            if (filtrados.length === 0) {
+                listaClientesDOM.innerHTML = "<p class='vacio'>No hay deudas pendientes registradas.</p>";
+                return;
+            }
+
+            filtrados.forEach(deudor => {
+                const totalBS = deudor.totalUSD * tasaCambioDia;
+
+                const div = document.createElement('div');
+                div.className = `tarjeta-deudor ${clienteSeleccionadoId === deudor.id ? 'seleccionado' : ''}`;
+                div.innerHTML = `
+                    <h4>${deudor.nombre}</h4>
+                    <p>CI: ${deudor.cedula}</p>
+                    <div class="monto-deuda">$${deudor.totalUSD.toFixed(2)} | Bs ${totalBS.toFixed(2)}</div>
+                `;
+                div.onclick = () => seleccionarCliente(deudor);
+                listaClientesDOM.appendChild(div);
+            });
+        }
+
+        inputBuscar.addEventListener('input', (e) => renderizarListaDeudores(e.target.value));
+
+        async function seleccionarCliente(deudor) {
+            clienteSeleccionadoId = deudor.id;
+            renderizarListaDeudores(inputBuscar.value);
+
+            panelDetalleDOM.innerHTML = `<p class="vacio">Cargando detalles de cuenta...</p>`;
+
+            try {
+                // Obtener créditos pendientes con desglose de venta y productos
+                const { data: creditos, error } = await db
+                    .from('creditos')
+                    .select(`
+                        id, 
+                        monto_usd, 
+                        created_at, 
+                        ventas (
+                            id,
+                            detalles_venta (
+                                cantidad,
+                                subtotal_usd,
+                                inventario ( nombre, precio_usd )
+                            )
+                        )
+                    `)
+                    .eq('cliente_id', deudor.id)
+                    .eq('estado', 'pendiente')
+                    .order('id', { ascending: true });
+
+                if (error) throw error;
+
+                const totalGeneralUSD = deudor.totalUSD;
+                const totalGeneralBS = totalGeneralUSD * tasaCambioDia;
+
+                let htmlContent = `
+                    <div class="header-detalle">
+                        <div>
+                            <h2>${deudor.nombre}</h2>
+                            <p style="color: #747d8c; font-size: 13px;">Cédula: ${deudor.cedula}</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <span style="font-size: 12px; color: #747d8c;">Deuda Total Actualizada:</span>
+                            <h2 style="color: var(--primary);">$${totalGeneralUSD.toFixed(2)}</h2>
+                            <strong style="color: var(--dark); font-size: 14px;">Bs ${totalGeneralBS.toFixed(2)}</strong>
+                        </div>
+                    </div>
+                `;
+
+                creditos.forEach(credito => {
+                    const fecha = new Date(credito.created_at).toLocaleString('es-VE');
+                    const montoBsAjustado = parseFloat(credito.monto_usd) * tasaCambioDia;
+
+                    let filasProductos = '';
+                    if (credito.ventas && credito.ventas.detalles_venta) {
+                        credito.ventas.detalles_venta.forEach(det => {
+                            const nombreProd = det.inventario ? det.inventario.nombre : 'Producto';
+                            filasProductos += `
+                                <tr>
+                                    <td>${det.cantidad}x ${nombreProd}</td>
+                                    <td class="der">$${parseFloat(det.subtotal_usd).toFixed(2)}</td>
+                                </tr>
+                            `;
+                        });
+                    }
+
+                    htmlContent += `
+                        <div class="ticket-credito">
+                            <div class="ticket-header">
+                                <strong>Ticket Venta #${credito.ventas ? credito.ventas.id : '-'}</strong>
+                                <span>${fecha}</span>
+                            </div>
+                            <table class="tabla-productos">
+                                <tbody>${filasProductos}</tbody>
+                            </table>
+                            <div class="totales-ticket">
+                                <div>
+                                    <strong>Subtotal Ticket: $${parseFloat(credito.monto_usd).toFixed(2)}</strong>
+                                    <div style="font-size: 12px; opacity: 0.8;">Bs ${montoBsAjustado.toFixed(2)}</div>
+                                </div>
+                                <button class="btn-pagar" onclick="saldarCredito(${credito.id})">Saldar Ticket</button>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                panelDetalleDOM.innerHTML = htmlContent;
+
+            } catch (err) {
+                console.error("Error al cargar detalles:", err);
+                panelDetalleDOM.innerHTML = `<p class="vacio">Ocurrió un error al cargar la información.</p>`;
+            }
+        }
+
+        async function saldarCredito(creditoId) {
+            if (!confirm("¿Confirmas que el cliente ha pagado este crédito?")) return;
+
+            try {
+                const { error } = await db
+                    .from('creditos')
+                    .update({ estado: 'pagado' })
+                    .eq('id', creditoId);
+
+                if (error) throw error;
+
+                alert("Crédito registrado como PAGADO.");
+                panelDetalleDOM.innerHTML = `<p class="vacio">Actualizando deudas...</p>`;
+                clienteSeleccionadoId = null;
+                await cargarDeudores();
+
+            } catch (err) {
+                console.error("Error al actualizar crédito:", err);
+                alert("No se pudo saldar el crédito.");
+            }
+        }
+
+        inicializar();
+    </script>
+</body>
+</html>
